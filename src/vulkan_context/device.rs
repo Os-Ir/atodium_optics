@@ -91,10 +91,10 @@ pub struct WrappedDevice {
 impl WrappedDevice {
     pub const ANYHOW_PARSE: fn() -> anyhow::Error = || unreachable!();
 
-    pub fn new(enable_validation: bool, validation_layers: &[&str], engine_name: &str, engine_version: u32, app_name: &str, app_version: u32, device_extensions: &[&CStr]) -> Result<Self> {
+    pub fn new(enable_validation: bool, validation_layers: &[&str], engine_name: &str, engine_version: u32, app_name: &str, app_version: u32, api_version: u32, device_extensions: &[&CStr]) -> Result<Self> {
         unsafe {
             let entry = ash::Entry::linked();
-            let instance = create_instance(&entry, enable_validation, validation_layers, engine_name, engine_version, app_name, app_version)?;
+            let instance = create_instance(&entry, enable_validation, validation_layers, engine_name, engine_version, app_name, app_version, api_version)?;
             let (debug_instance, debug_messenger) = create_debug_messenger(&entry, &instance)?;
             let (physical_device, queue_family_index) = select_physical_device(&instance, device_extensions)?;
             let (handle, graphic_queue) = create_device(&instance, physical_device, queue_family_index, device_extensions)?;
@@ -248,7 +248,7 @@ fn find_queue_family_info(instance: &ash::Instance, physical_device: PhysicalDev
     })
 }
 
-unsafe fn create_instance(entry: &ash::Entry, enable_validation: bool, validation_layers: &[&str], engine_name: &str, engine_version: u32, app_name: &str, app_version: u32) -> Result<ash::Instance> {
+unsafe fn create_instance(entry: &ash::Entry, enable_validation: bool, validation_layers: &[&str], engine_name: &str, engine_version: u32, app_name: &str, app_version: u32, api_version: u32) -> Result<ash::Instance> {
     if enable_validation && !check_validation_layer_support(entry, validation_layers) {
         return Err(anyhow!("Validation layers are not available."));
     }
@@ -261,7 +261,7 @@ unsafe fn create_instance(entry: &ash::Entry, enable_validation: bool, validatio
         .engine_name(cstr_engine_name.as_c_str())
         .application_version(app_version)
         .engine_version(engine_version)
-        .api_version(engine_version);
+        .api_version(api_version);
 
     let validation_layers_ptr: Vec<*const c_char> = validation_layers.iter().map(|layer| layer.as_ptr() as *const c_char).collect();
     let extensions_pointer: Vec<*const c_char> = get_required_extensions();
@@ -375,7 +375,7 @@ unsafe fn create_device(instance: &ash::Instance, physical_device: PhysicalDevic
 
         let mut acceleration_structure_features = PhysicalDeviceAccelerationStructureFeaturesKHR::default().acceleration_structure(true);
 
-        let mut vulkan_12_features = PhysicalDeviceVulkan12Features::default().runtime_descriptor_array(true).buffer_device_address(true);
+        let mut vulkan_12_features = PhysicalDeviceVulkan12Features::default().descriptor_indexing(true).runtime_descriptor_array(true).buffer_device_address(true);
 
         let mut vulkan_13_features = PhysicalDeviceVulkan13Features::default().dynamic_rendering(true).synchronization2(true);
 

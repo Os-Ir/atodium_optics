@@ -1,3 +1,4 @@
+use ash::vk;
 use ash::vk::DeviceSize;
 use std::ffi::CStr;
 
@@ -6,6 +7,11 @@ pub mod device;
 pub mod shader_compiler;
 pub mod shader_reflection;
 pub mod pipeline;
+
+pub const ENGINE_NAME: &str = "Atodium Optics";
+pub const ENGINE_VERSION: u32 = vk::make_api_version(0, 1, 1, 1);
+
+pub const API_VERSION: u32 = vk::API_VERSION_1_3;
 
 pub const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 

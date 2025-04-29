@@ -48,7 +48,7 @@ pub fn load_shaders() -> ShaderIncludeStructure {
                 return None;
             }
 
-            info!("Loading ray tracing shader: [ {} ]", entry.path().display());
+            info!("Loading shader: [ {} ]", entry.path().display());
 
             fs::read_to_string(entry.path()).ok().map(|content| (entry.into_path(), content))
         })
@@ -69,6 +69,7 @@ pub fn compile_glsl_shader(shader_path: &str, shader_kind: ShaderKind, include_s
     options.add_macro_definition("EP", Some("main"));
     options.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_2 as u32);
     options.set_generate_debug_info();
+
     options.set_include_callback(|include_request, _, _, _| {
         let mut include_path = shader_path_buf.join(include_request);
 
@@ -105,7 +106,6 @@ pub fn create_pipeline_layout(
     let mut descriptor_set_layouts: Vec<DescriptorSetLayout> = if let Some(bindless_descriptor_set_layout) = bindless_descriptor_set_layout {
         let mut layouts = Vec::with_capacity(reflection.descriptor_template.len() + 1);
         layouts.push(bindless_descriptor_set_layout);
-
         layouts
     } else {
         Vec::with_capacity(reflection.descriptor_template.len())

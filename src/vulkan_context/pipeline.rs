@@ -1,19 +1,12 @@
 use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
 use crate::vulkan_context;
-use crate::vulkan_context::device::WrappedDevice;
+use crate::vulkan_context::device::{WrappedDevice, WrappedDeviceRef};
 use crate::vulkan_context::shader_compiler;
 use crate::vulkan_context::shader_compiler::ShaderIncludeStructure;
 use crate::vulkan_context::shader_reflection::ShaderReflection;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use ash::vk;
-use ash::vk::{
-    BlendFactor, BlendOp, BufferUsageFlags, ColorComponentFlags, CompareOp, ComputePipelineCreateInfo, DeferredOperationKHR, DescriptorSetLayout, DeviceSize, DynamicState, Format, FrontFace,
-    GraphicsPipelineCreateInfo, LogicOp, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
-    PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineRenderingCreateInfo,
-    PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, RayTracingPipelineCreateInfoKHR,
-    RayTracingShaderGroupCreateInfoKHR, RayTracingShaderGroupTypeKHR, RenderPass, SampleCountFlags, ShaderStageFlags, StencilOp, StencilOpState, StridedDeviceAddressRegionKHR,
-    VertexInputAttributeDescription, VertexInputBindingDescription,
-};
+use ash::vk::{BlendFactor, BlendOp, BufferUsageFlags, ColorComponentFlags, CompareOp, ComputePipelineCreateInfo, DeferredOperationKHR, DescriptorSetLayout, DeviceSize, DynamicState, Format, FrontFace, GraphicsPipelineCreateInfo, LogicOp, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineRenderingCreateInfo, PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, RayTracingPipelineCreateInfoKHR, RayTracingShaderGroupCreateInfoKHR, RayTracingShaderGroupTypeKHR, RenderPass, SampleCountFlags, ShaderModule, ShaderStageFlags, StencilOp, StencilOpState, StridedDeviceAddressRegionKHR, VertexInputAttributeDescription, VertexInputBindingDescription};
 use gpu_allocator::MemoryLocation;
 use shaderc::ShaderKind;
 use std::hash::{Hash, Hasher};
@@ -36,9 +29,12 @@ pub struct PipelineDesc {
 }
 
 pub struct WrappedPipeline {
+    device: WrappedDeviceRef,
+
     pub handle: Pipeline,
     pub pipeline_layout: PipelineLayout,
     pub descriptor_set_layouts: Vec<DescriptorSetLayout>,
+    pub shader_modules: Vec<ShaderModule>,
     pub reflection: ShaderReflection,
     pub pipeline_desc: PipelineDesc,
     pub pipeline_type: PipelineType,
@@ -50,6 +46,18 @@ impl Deref for WrappedPipeline {
 
     fn deref(&self) -> &Self::Target {
         &self.handle
+    }
+}
+
+impl Drop for WrappedPipeline {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.device_wait_idle().unwrap();
+            self.device.destroy_pipeline(self.handle, None);
+            self.device.destroy_pipeline_layout(self.pipeline_layout, None);
+            self.descriptor_set_layouts.iter().for_each(|&descriptor_set_layout| self.device.destroy_descriptor_set_layout(descriptor_set_layout, None));
+            self.shader_modules.iter().for_each(|&shader_module| self.device.destroy_shader_module(shader_module, None));
+        }
     }
 }
 
@@ -171,7 +179,7 @@ impl PartialEq for PipelineDesc {
 
 impl WrappedPipeline {
     pub fn new(
-        device: &WrappedDevice,
+        device: WrappedDeviceRef,
         buffer_allocator: &RenderBufferAllocator,
         pipeline_desc: PipelineDesc,
         include_structure: &ShaderIncludeStructure,
@@ -187,17 +195,17 @@ impl WrappedPipeline {
             return Err(anyhow!("Pipeline description is incomplete"));
         };
 
-        let (shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts) = match pipeline_type {
+        let (shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules) = match pipeline_type {
             PipelineType::Graphics => Self::create_graphics_shader_modules(
-                device,
+                &device,
                 &pipeline_desc.vertex_path.as_ref().unwrap(),
                 &pipeline_desc.fragment_path.as_ref().unwrap(),
                 include_structure,
                 bindless_descriptor_set_layout,
             ),
-            PipelineType::Compute => Self::create_compute_shader_modules(device, &pipeline_desc.compute_path.as_ref().unwrap(), include_structure, bindless_descriptor_set_layout),
+            PipelineType::Compute => Self::create_compute_shader_modules(&device, &pipeline_desc.compute_path.as_ref().unwrap(), include_structure, bindless_descriptor_set_layout),
             PipelineType::Raytracing => Self::create_raytracing_shader_modules(
-                device,
+                &device,
                 &pipeline_desc.raygen_path.as_ref().unwrap(),
                 &pipeline_desc.miss_path.as_ref().unwrap(),
                 &pipeline_desc.closest_hit_path.as_ref().unwrap(),
@@ -208,27 +216,29 @@ impl WrappedPipeline {
 
         let handle = match pipeline_type {
             PipelineType::Graphics => WrappedPipeline::create_graphics_pipeline(
-                device,
+                &device,
                 shader_stage_create_infos,
                 &pipeline_desc.color_attachment_formats,
                 pipeline_desc.depth_stencil_attachment_format,
                 pipeline_layout,
                 &pipeline_desc,
             ),
-            PipelineType::Compute => WrappedPipeline::create_compute_pipeline(device, shader_stage_create_infos, pipeline_layout),
-            PipelineType::Raytracing => WrappedPipeline::create_raytracing_pipeline(device, shader_stage_create_infos, pipeline_layout),
+            PipelineType::Compute => WrappedPipeline::create_compute_pipeline(&device, shader_stage_create_infos, pipeline_layout),
+            PipelineType::Raytracing => WrappedPipeline::create_raytracing_pipeline(&device, shader_stage_create_infos, pipeline_layout),
         }?;
 
         let raytracing_sbt = if pipeline_type == PipelineType::Raytracing {
-            Some(WrappedPipeline::create_raytracing_sbt(device, buffer_allocator, handle, 1, 1)?)
+            Some(WrappedPipeline::create_raytracing_sbt(&device, buffer_allocator, handle, 1, 1)?)
         } else {
             None
         };
 
-        let mut pipeline = WrappedPipeline {
+        let pipeline = WrappedPipeline {
+            device,
             handle,
             pipeline_layout,
             descriptor_set_layouts,
+            shader_modules,
             reflection,
             pipeline_desc,
             pipeline_type,
@@ -254,7 +264,7 @@ impl WrappedPipeline {
         fragment_shader_path: &str,
         include_structure: &ShaderIncludeStructure,
         bindless_descriptor_set_layout: Option<DescriptorSetLayout>,
-    ) -> Result<(Vec<PipelineShaderStageCreateInfo<'static>>, ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>)> {
+    ) -> Result<(Vec<PipelineShaderStageCreateInfo<'static>>, ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>, Vec<ShaderModule>)> {
         let vertex_shader = shader_compiler::compile_glsl_shader(vertex_shader_path, ShaderKind::Vertex, include_structure)?;
         let fragment_shader = shader_compiler::compile_glsl_shader(fragment_shader_path, ShaderKind::Fragment, include_structure)?;
 
@@ -281,7 +291,9 @@ impl WrappedPipeline {
             },
         ];
 
-        Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts))
+        let shader_modules = vec![vertex_shader_module, fragment_shader_module];
+
+        Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
     }
 
     fn create_graphics_pipeline(
@@ -370,7 +382,7 @@ impl WrappedPipeline {
         compute_shader_path: &str,
         include_structure: &ShaderIncludeStructure,
         bindless_descriptor_set_layout: Option<DescriptorSetLayout>,
-    ) -> Result<(Vec<PipelineShaderStageCreateInfo<'static>>, ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>)> {
+    ) -> Result<(Vec<PipelineShaderStageCreateInfo<'static>>, ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>, Vec<ShaderModule>)> {
         let compute_shader = shader_compiler::compile_glsl_shader(compute_shader_path, ShaderKind::Compute, include_structure)?;
 
         let reflection = ShaderReflection::new(&[compute_shader.as_binary_u8()])?;
@@ -387,7 +399,9 @@ impl WrappedPipeline {
             ..Default::default()
         }];
 
-        Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts))
+        let shader_modules = vec![compute_shader_module];
+
+        Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
     }
 
     fn create_compute_pipeline(device: &WrappedDevice, shader_stage_create_infos: Vec<PipelineShaderStageCreateInfo>, pipeline_layout: PipelineLayout) -> Result<Pipeline> {
@@ -406,7 +420,7 @@ impl WrappedPipeline {
         closest_hit_shader_path: &str,
         include_structure: &ShaderIncludeStructure,
         bindless_descriptor_set_layout: Option<DescriptorSetLayout>,
-    ) -> Result<(Vec<PipelineShaderStageCreateInfo<'static>>, ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>)> {
+    ) -> Result<(Vec<PipelineShaderStageCreateInfo<'static>>, ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>, Vec<ShaderModule>)> {
         let raygen_shader = shader_compiler::compile_glsl_shader(raygen_shader_path, ShaderKind::RayGeneration, include_structure)?;
         let miss_shader = shader_compiler::compile_glsl_shader(miss_shader_path, ShaderKind::Miss, include_structure)?;
         let closest_hit_shader = shader_compiler::compile_glsl_shader(closest_hit_shader_path, ShaderKind::ClosestHit, include_structure)?;
@@ -440,7 +454,9 @@ impl WrappedPipeline {
             },
         ];
 
-        Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts))
+        let shader_modules = vec![raygen_shader_module, miss_shader_module, closest_hit_shader_module];
+
+        Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
     }
 
     fn create_raytracing_pipeline(device: &WrappedDevice, shader_stage_create_infos: Vec<PipelineShaderStageCreateInfo>, pipeline_layout: PipelineLayout) -> Result<Pipeline> {
