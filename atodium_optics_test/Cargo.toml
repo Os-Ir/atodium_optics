@@ -1,0 +1,12 @@
+[package]
+name = "atodium_optics_test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+atodium_optics = { path = ".." }
+anyhow = "1.0.89"
+lazy_static = "1.5.0"
+env_logger = "0.11.8"
+log = "0.4.27"
+chrono = "0.4.40"

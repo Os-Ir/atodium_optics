@@ -1,0 +1,15 @@
+[package]
+name = "atodium_optics"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ash = { version = "0.38.0", features = ["linked", "debug"] }
+anyhow = "1.0.89"
+gpu-allocator = "0.27.0"
+shaderc = "0.9.1"
+rspirv-reflect = "0.9.0"
+lazy_static = "1.5.0"
+log = "0.4.27"
+image = "0.25.6"
+walkdir = "2.5.0"
