@@ -238,17 +238,6 @@ fn generate_debug_messenger_info() -> DebugUtilsMessengerCreateInfoEXT<'static> 
 
 fn find_queue_family_info(instance: &ash::Instance, physical_device: PhysicalDevice) -> Option<u32> {
     let queue_family_properties = unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
-    let mut graphic_family: Option<u32> = None;
-
-    for (index, &queue_family_property) in queue_family_properties.iter().enumerate() {
-        let index = index as u32;
-        let graphic = queue_family_property.queue_flags.contains(QueueFlags::GRAPHICS);
-
-        if graphic {
-            graphic_family = Some(index);
-            break;
-        }
-    }
 
     queue_family_properties.iter().enumerate().find_map(|(index, &queue_family_property)| {
         if queue_family_property.queue_flags.contains(QueueFlags::GRAPHICS) {
