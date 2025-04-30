@@ -2,9 +2,9 @@
 
 layout (local_size_x = 16, local_size_y = 8, local_size_z = 1) in;
 
-layout (binding = 0, set = 0) buffer storageBuffer {
+layout (set = 0, binding = 0) buffer storageBuffer {
     float imageData[];
-};
+} storageImage;
 
 void main() {
     const uvec2 resolution = uvec2(800, 600);
@@ -19,7 +19,7 @@ void main() {
 
     uint linearIndex = resolution.x * pixel.y + pixel.x;
 
-    imageData[3 * linearIndex + 0] = pixelColor.r;
-    imageData[3 * linearIndex + 1] = pixelColor.g;
-    imageData[3 * linearIndex + 2] = pixelColor.b;
+    storageImage.imageData[3 * linearIndex + 0] = pixelColor.r;
+    storageImage.imageData[3 * linearIndex + 1] = pixelColor.g;
+    storageImage.imageData[3 * linearIndex + 2] = pixelColor.b;
 }

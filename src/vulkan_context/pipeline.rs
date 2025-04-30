@@ -6,7 +6,7 @@ use crate::vulkan_context::shader_compiler::ShaderIncludeStructure;
 use crate::vulkan_context::shader_reflection::ShaderReflection;
 use anyhow::{anyhow, Result};
 use ash::vk;
-use ash::vk::{BlendFactor, BlendOp, BufferUsageFlags, ColorComponentFlags, CompareOp, ComputePipelineCreateInfo, DeferredOperationKHR, DescriptorSetLayout, DeviceSize, DynamicState, Format, FrontFace, GraphicsPipelineCreateInfo, LogicOp, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineRenderingCreateInfo, PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, RayTracingPipelineCreateInfoKHR, RayTracingShaderGroupCreateInfoKHR, RayTracingShaderGroupTypeKHR, RenderPass, SampleCountFlags, ShaderModule, ShaderStageFlags, StencilOp, StencilOpState, StridedDeviceAddressRegionKHR, VertexInputAttributeDescription, VertexInputBindingDescription};
+use ash::vk::{BlendFactor, BlendOp, BufferUsageFlags, ColorComponentFlags, CommandBuffer, CompareOp, ComputePipelineCreateInfo, DeferredOperationKHR, DescriptorSetLayout, DeviceSize, DynamicState, Format, FrontFace, GraphicsPipelineCreateInfo, LogicOp, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineRenderingCreateInfo, PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, RayTracingPipelineCreateInfoKHR, RayTracingShaderGroupCreateInfoKHR, RayTracingShaderGroupTypeKHR, RenderPass, SampleCountFlags, ShaderModule, ShaderStageFlags, StencilOp, StencilOpState, StridedDeviceAddressRegionKHR, VertexInputAttributeDescription, VertexInputBindingDescription};
 use gpu_allocator::MemoryLocation;
 use shaderc::ShaderKind;
 use std::hash::{Hash, Hasher};
@@ -246,6 +246,19 @@ impl WrappedPipeline {
         };
 
         Ok(pipeline)
+    }
+
+    #[inline]
+    pub fn bind_point(&self) -> PipelineBindPoint {
+        match self.pipeline_type {
+            PipelineType::Graphics => PipelineBindPoint::GRAPHICS,
+            PipelineType::Compute => PipelineBindPoint::COMPUTE,
+            PipelineType::Raytracing => PipelineBindPoint::RAY_TRACING_KHR,
+        }
+    }
+
+    pub fn bind(&self, cmd_buf: CommandBuffer) {
+        unsafe { self.device.cmd_bind_pipeline(cmd_buf, self.bind_point(), self.handle) };
     }
 
     // pub fn recreate_pipeline(&mut self, device: &WrappedDevice, bindless_descriptor_set_layout: Option<DescriptorSetLayout>) -> bool {

@@ -1,5 +1,5 @@
 use crate::vulkan_context::device::WrappedDeviceRef;
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use ash::vk::{Buffer, BufferCopy, BufferCreateInfo, BufferDeviceAddressInfo, BufferUsageFlags, CommandBuffer, DeviceAddress, DeviceSize, IndexType, SharingMode};
 use core::slice;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator as GpuAllocator, AllocatorCreateDesc};
@@ -140,11 +140,6 @@ impl RenderBufferAllocator {
 
             self.device.bind_buffer_memory(buffer, memory, allocation.offset())?;
 
-            let _addr = {
-                let info = BufferDeviceAddressInfo::default().buffer(buffer);
-                self.device.get_buffer_device_address(&info)
-            };
-
             Ok(RenderBuffer::new(self.device.clone(), self.gpu_allocator.clone(), location, size, buffer, allocation))
         }
     }
@@ -157,7 +152,7 @@ impl RenderBufferAllocator {
             if buffer.memory_location != MemoryLocation::GpuOnly {
                 let allocation = buffer.allocation.as_ref().unwrap();
 
-                let dst = allocation.mapped_ptr().unwrap().as_ptr() as *mut u8;
+                let dst = allocation.mapped_ptr().ok_or_else(|| anyhow!("Failed to get mapped pointer for CPU accessible buffer"))?.as_ptr() as *mut u8;
                 let dst_size = allocation.size() as usize;
 
                 ptr::copy_nonoverlapping(data_ptr, dst, cmp::min(data_size, dst_size));
@@ -165,7 +160,7 @@ impl RenderBufferAllocator {
                 let staging_buffer = self.allocate(buffer.size, BufferUsageFlags::TRANSFER_SRC, MemoryLocation::CpuToGpu)?;
                 let staging_allocation = staging_buffer.allocation.as_ref().unwrap();
 
-                let staging_ptr = staging_allocation.mapped_ptr().unwrap().as_ptr() as *mut u8;
+                let staging_ptr = staging_allocation.mapped_ptr().ok_or_else(|| anyhow!("Failed to get mapped pointer for staging buffer"))?.as_ptr() as *mut u8;
                 let staging_size = staging_allocation.size() as usize;
                 ptr::copy_nonoverlapping(data_ptr, staging_ptr, cmp::min(data_size, staging_size));
 
@@ -177,6 +172,58 @@ impl RenderBufferAllocator {
             }
 
             Ok(())
+        }
+    }
+
+    pub fn download_data<T: Copy>(&self, buffer: &RenderBuffer) -> Result<Vec<T>> {
+        unsafe {
+            let type_size = size_of::<T>();
+
+            if type_size == 0 {
+                bail!("Cannot download data for zero-sized type <T>");
+            }
+            if buffer.size == 0 {
+                return Ok(vec![]);
+            }
+            if buffer.size % type_size as u64 != 0 {
+                bail!( "Buffer size {} is not a aligned with the size of <T> {}", buffer.size, type_size);
+            }
+
+            let element_count = (buffer.size / type_size as DeviceSize) as usize;
+            let dst_size = buffer.size as usize;
+
+            let mut data: Vec<T> = Vec::with_capacity(element_count);
+
+            let dst_ptr = data.as_mut_ptr() as *mut u8;
+
+            if buffer.memory_location != MemoryLocation::GpuOnly {
+                let allocation = buffer.allocation.as_ref().unwrap();
+
+                let src_ptr = allocation.mapped_ptr().ok_or_else(|| anyhow!("Failed to get mapped pointer for CPU accessible buffer"))?.as_ptr() as *const u8;
+
+                ptr::copy_nonoverlapping(src_ptr, dst_ptr, dst_size);
+            } else {
+                let staging_buffer = self.allocate(buffer.size, BufferUsageFlags::TRANSFER_DST, MemoryLocation::GpuToCpu)?;
+
+                let staging_allocation = staging_buffer.allocation.as_ref().unwrap();
+
+                self.device.single_time_command(|device, command_buffer| {
+                    let regions = BufferCopy::default()
+                        .size(buffer.size)
+                        .src_offset(0)
+                        .dst_offset(0);
+
+                    device.handle.cmd_copy_buffer(command_buffer, buffer.buffer, staging_buffer.buffer, slice::from_ref(&regions));
+                })?;
+
+                let src_ptr = staging_allocation.mapped_ptr().ok_or_else(|| anyhow!("Failed to get mapped pointer for staging buffer"))?.as_ptr() as *const u8;
+
+                ptr::copy_nonoverlapping(src_ptr, dst_ptr, dst_size);
+            }
+
+            data.set_len(element_count);
+
+            Ok(data)
         }
     }
 }

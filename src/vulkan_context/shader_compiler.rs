@@ -114,7 +114,7 @@ pub fn create_pipeline_layout(
     for (set_index, descriptor_set) in &reflection.descriptor_template {
         let descriptor_set_layout_bindings: Vec<DescriptorSetLayoutBinding> = descriptor_set
             .iter()
-            .filter_map(|(binding, descriptor_info)| {
+            .filter_map(|(&binding, descriptor_info)| {
                 let binding_count = match descriptor_info.binding_count {
                     BindingCount::One => 1,
                     BindingCount::StaticSized(size) => size as u32,
@@ -126,7 +126,7 @@ pub fn create_pipeline_layout(
                 };
 
                 let descriptor_set_layout_binding = DescriptorSetLayoutBinding::default()
-                    .binding(*binding)
+                    .binding(binding)
                     .descriptor_type(descriptor_set::map_rspirv_descriptor_type(descriptor_info.ty))
                     .descriptor_count(binding_count)
                     .stage_flags(ShaderStageFlags::ALL);
@@ -156,13 +156,13 @@ pub fn create_pipeline_layout(
         );
     }
 
-    let pipeline_layout_create_info = if !push_constant_ranges.is_empty() {
+    let pipeline_layout_info = if !push_constant_ranges.is_empty() {
         PipelineLayoutCreateInfo::default().set_layouts(&descriptor_set_layouts).push_constant_ranges(&push_constant_ranges)
     } else {
         PipelineLayoutCreateInfo::default().set_layouts(&descriptor_set_layouts)
     };
 
-    let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_create_info, None).expect("Error creating pipeline layout") };
+    let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None).expect("Failed to create pipeline layout") };
 
     (pipeline_layout, descriptor_set_layouts, push_constant_ranges)
 }
