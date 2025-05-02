@@ -1,6 +1,6 @@
-use crate::vulkan_context::descriptor_set;
-use crate::vulkan_context::device::WrappedDevice;
-use crate::vulkan_context::shader_reflection::ShaderReflection;
+use crate::vk_context::descriptor_set;
+use crate::vk_context::device::WrappedDevice;
+use crate::vk_context::shader_reflection::ShaderReflection;
 use anyhow::{Result, anyhow};
 use ash::vk::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PushConstantRange, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags,

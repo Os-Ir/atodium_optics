@@ -1,9 +1,9 @@
 use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
-use crate::vulkan_context;
-use crate::vulkan_context::device::{WrappedDevice, WrappedDeviceRef};
-use crate::vulkan_context::shader_compiler;
-use crate::vulkan_context::shader_compiler::ShaderIncludeStructure;
-use crate::vulkan_context::shader_reflection::ShaderReflection;
+use crate::vk_context;
+use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
+use crate::vk_context::shader_compiler;
+use crate::vk_context::shader_compiler::ShaderIncludeStructure;
+use crate::vk_context::shader_reflection::ShaderReflection;
 use anyhow::{anyhow, Result};
 use ash::vk;
 use ash::vk::{BlendFactor, BlendOp, BufferUsageFlags, ColorComponentFlags, CommandBuffer, CompareOp, ComputePipelineCreateInfo, DeferredOperationKHR, DescriptorSetLayout, DeviceSize, DynamicState, Format, FrontFace, GraphicsPipelineCreateInfo, LogicOp, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineRenderingCreateInfo, PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, RayTracingPipelineCreateInfoKHR, RayTracingShaderGroupCreateInfoKHR, RayTracingShaderGroupTypeKHR, RenderPass, SampleCountFlags, ShaderModule, ShaderStageFlags, StencilOp, StencilOpState, StridedDeviceAddressRegionKHR, VertexInputAttributeDescription, VertexInputBindingDescription};
@@ -515,11 +515,11 @@ impl WrappedPipeline {
         let handle_alignment = device.rt_pipeline_properties.shader_group_handle_alignment as DeviceSize;
         let base_alignment = device.rt_pipeline_properties.shader_group_base_alignment as DeviceSize;
 
-        let handle_size_aligned = vulkan_context::align_up(handle_size, handle_alignment);
+        let handle_size_aligned = vk_context::align_up(handle_size, handle_alignment);
 
-        let raygen_size = vulkan_context::align_up(handle_size_aligned, base_alignment);
-        let miss_size = vulkan_context::align_up((miss_count as DeviceSize) * handle_size_aligned, base_alignment);
-        let closest_hit_size = vulkan_context::align_up((miss_count as DeviceSize) * handle_size_aligned, base_alignment);
+        let raygen_size = vk_context::align_up(handle_size_aligned, base_alignment);
+        let miss_size = vk_context::align_up((miss_count as DeviceSize) * handle_size_aligned, base_alignment);
+        let closest_hit_size = vk_context::align_up((miss_count as DeviceSize) * handle_size_aligned, base_alignment);
 
         let handle_count = 1 + miss_count + closest_hit_count;
         let sbt_buffer_size = raygen_size + miss_size + closest_hit_size;

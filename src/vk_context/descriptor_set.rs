@@ -1,10 +1,13 @@
 use crate::render_resource::render_buffer::RenderBuffer;
-use crate::vulkan_context::device::WrappedDeviceRef;
-use crate::vulkan_context::shader_reflection::BindingMap;
+use crate::vk_context::device::WrappedDeviceRef;
+use crate::vk_context::pipeline::WrappedPipeline;
+use crate::vk_context::shader_reflection::BindingMap;
 use anyhow::{Result, anyhow};
-use ash::vk::{AccelerationStructureKHR, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorType, WriteDescriptorSet, WriteDescriptorSetAccelerationStructureKHR};
+use ash::vk::{
+    AccelerationStructureKHR, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
+    DescriptorSetLayout, DescriptorType, WriteDescriptorSet, WriteDescriptorSetAccelerationStructureKHR,
+};
 use std::slice;
-use crate::vulkan_context::pipeline::WrappedPipeline;
 
 pub fn map_rspirv_descriptor_type(rspirv_type: rspirv_reflect::DescriptorType) -> DescriptorType {
     match rspirv_type {
@@ -61,8 +64,12 @@ impl Drop for WrappedDescriptorSet {
 }
 
 impl WrappedDescriptorSet {
-    pub fn new(device: WrappedDeviceRef, layout: DescriptorSetLayout, binding_map: BindingMap) -> Result<Self> {
-        let descriptor_pool_sizes: Vec<DescriptorPoolSize> = binding_map
+    pub fn new(device: WrappedDeviceRef, pipeline: &WrappedPipeline, descriptor_set_index: usize) -> Result<Self> {
+        let layout = pipeline.descriptor_set_layouts[descriptor_set_index];
+
+        let descriptor_pool_sizes: Vec<DescriptorPoolSize> = pipeline
+            .reflection
+            .binding_map
             .values()
             .map(|val| DescriptorPoolSize::default().ty(map_rspirv_descriptor_type(val.info.ty)).descriptor_count(1))
             .collect();
@@ -84,7 +91,7 @@ impl WrappedDescriptorSet {
             device,
             descriptor_set,
             descriptor_pool,
-            binding_map,
+            binding_map: pipeline.reflection.binding_map.clone(),
         })
     }
 
@@ -154,6 +161,9 @@ impl WrappedDescriptorSet {
     }
 
     pub fn bind(&self, cmd_buf: CommandBuffer, pipeline: &WrappedPipeline) {
-        unsafe { self.device.cmd_bind_descriptor_sets(cmd_buf, pipeline.bind_point(), pipeline.pipeline_layout, 0, slice::from_ref(&self.descriptor_set), &[]) };
+        unsafe {
+            self.device
+                .cmd_bind_descriptor_sets(cmd_buf, pipeline.bind_point(), pipeline.pipeline_layout, 0, slice::from_ref(&self.descriptor_set), &[])
+        };
     }
 }

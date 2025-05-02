@@ -1,9 +1,7 @@
-use crate::render_resource::render_buffer::{RenderBufferAllocator, RenderBufferAllocatorRef};
-use crate::vulkan_context::descriptor_set::{DescriptorId, WrappedDescriptorSet};
-use crate::vulkan_context::device::{WrappedDevice, WrappedDeviceRef};
-use crate::vulkan_context::pipeline::{PipelineDesc, WrappedPipeline};
-use crate::vulkan_context::{shader_compiler, API_VERSION, DEVICE_EXTENSIONS, VALIDATION_LAYERS};
+use crate::vk_context::descriptor_set::{DescriptorId, WrappedDescriptorSet};
+use crate::vk_context::pipeline::{PipelineDesc, WrappedPipeline};
 use anyhow::{anyhow, Result};
+use ash::vk;
 use ash::vk::BufferUsageFlags;
 use gpu_allocator::MemoryLocation;
 use image::{ImageBuffer, ImageFormat};
@@ -12,7 +10,9 @@ use std::mem;
 use std::path::Path;
 
 pub mod render_resource;
-pub mod vulkan_context;
+pub mod vk_context;
+pub mod rt;
+mod model;
 
 #[inline]
 pub fn lib_root() -> &'static Path {
@@ -37,16 +37,14 @@ pub fn cstr_to_str(vk_str: &[c_char]) -> Result<&str> {
 
 #[test]
 pub fn test_hello_world() -> Result<()> {
-    let device: WrappedDeviceRef = WrappedDevice::new(true, &VALIDATION_LAYERS, "atodium_optics", 0, "atodium_optics_test", 0, API_VERSION, &DEVICE_EXTENSIONS)?.into();
-    let buffer_allocator: RenderBufferAllocatorRef = RenderBufferAllocator::new(device.clone())?.into();
+    let (device, buffer_allocator, include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
 
-    let include_structure = shader_compiler::load_shaders();
     let pipeline_desc = PipelineDesc::default().compute_path("render.comp.glsl".into());
     let pipeline = WrappedPipeline::new(device.clone(), &buffer_allocator, pipeline_desc, &include_structure, None)?;
 
     let buffer = buffer_allocator.allocate(800 * 600 * 3 * 4, BufferUsageFlags::STORAGE_BUFFER, MemoryLocation::GpuToCpu)?;
 
-    let descriptor = WrappedDescriptorSet::new(device.clone(), pipeline.descriptor_set_layouts[0], pipeline.reflection.binding_map.clone())?;
+    let descriptor = WrappedDescriptorSet::new(device.clone(), &pipeline, 0)?;
     descriptor.write_storage_buffer(DescriptorId::Index(0), &buffer)?;
 
     let render_width = 800;
