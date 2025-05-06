@@ -1,5 +1,5 @@
 use crate::vk_context::device::WrappedDeviceRef;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use ash::vk::{Buffer, BufferCopy, BufferCreateInfo, BufferDeviceAddressInfo, BufferUsageFlags, CommandBuffer, DeviceAddress, DeviceSize, IndexType, SharingMode};
 use core::slice;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator as GpuAllocator, AllocatorCreateDesc};
@@ -15,10 +15,19 @@ pub struct RenderBuffer {
     pub size: DeviceSize,
     pub buffer: Buffer,
     pub allocation: Option<Allocation>,
+    pub device_addr: Option<DeviceAddress>,
 }
 
 impl RenderBuffer {
-    pub fn new(device: WrappedDeviceRef, gpu_allocator: GpuAllocatorRef, memory_location: MemoryLocation, size: DeviceSize, buffer: Buffer, allocation: Allocation) -> Self {
+    pub fn new(
+        device: WrappedDeviceRef,
+        gpu_allocator: GpuAllocatorRef,
+        memory_location: MemoryLocation,
+        size: DeviceSize,
+        buffer: Buffer,
+        allocation: Allocation,
+        device_addr: Option<DeviceAddress>,
+    ) -> Self {
         Self {
             device,
             gpu_allocator,
@@ -26,6 +35,7 @@ impl RenderBuffer {
             size,
             buffer,
             allocation: Some(allocation),
+            device_addr,
         }
     }
 
@@ -41,19 +51,17 @@ impl RenderBuffer {
     }
 
     pub fn copy_from(&self, source: &RenderBuffer) -> Result<()> {
-        self.device.single_time_command(|device, command_buffer| unsafe {
+        self.device.single_time_command(|cmd_buf| unsafe {
             let region = BufferCopy::default().size(cmp::min(self.size, source.size));
 
-            device.cmd_copy_buffer(command_buffer, source.buffer, self.buffer, slice::from_ref(&region))
+            self.device.cmd_copy_buffer(cmd_buf, source.buffer, self.buffer, slice::from_ref(&region))
         })?;
 
         Ok(())
     }
 
-    pub fn device_addr(&self) -> DeviceAddress {
-        let info = BufferDeviceAddressInfo::default().buffer(self.buffer);
-
-        unsafe { self.device.get_buffer_device_address(&info) }
+    pub fn device_addr(&self) -> Option<DeviceAddress> {
+        self.device_addr
     }
 }
 
@@ -140,7 +148,15 @@ impl RenderBufferAllocator {
 
             self.device.bind_buffer_memory(buffer, memory, allocation.offset())?;
 
-            Ok(RenderBuffer::new(self.device.clone(), self.gpu_allocator.clone(), location, size, buffer, allocation))
+            let addr = if usage.contains(BufferUsageFlags::SHADER_DEVICE_ADDRESS) {
+                let addr_info = BufferDeviceAddressInfo::default().buffer(buffer);
+
+                Some(self.device.get_buffer_device_address(&addr_info))
+            } else {
+                None
+            };
+
+            Ok(RenderBuffer::new(self.device.clone(), self.gpu_allocator.clone(), location, size, buffer, allocation, addr))
         }
     }
 
@@ -164,10 +180,10 @@ impl RenderBufferAllocator {
                 let staging_size = staging_allocation.size() as usize;
                 ptr::copy_nonoverlapping(data_ptr, staging_ptr, cmp::min(data_size, staging_size));
 
-                self.device.single_time_command(|device, command_buffer| {
+                self.device.single_time_command(|cmd_buf| {
                     let regions = BufferCopy::default().size(buffer.size).src_offset(0).dst_offset(0);
 
-                    device.handle.cmd_copy_buffer(command_buffer, staging_buffer.buffer, buffer.buffer, slice::from_ref(&regions));
+                    self.device.handle.cmd_copy_buffer(cmd_buf, staging_buffer.buffer, buffer.buffer, slice::from_ref(&regions));
                 })?;
             }
 
@@ -186,7 +202,7 @@ impl RenderBufferAllocator {
                 return Ok(vec![]);
             }
             if buffer.size % type_size as u64 != 0 {
-                bail!( "Buffer size {} is not a aligned with the size of <T> {}", buffer.size, type_size);
+                bail!("Buffer size {} is not a aligned with the size of <T> {}", buffer.size, type_size);
             }
 
             let element_count = (buffer.size / type_size as DeviceSize) as usize;
@@ -207,13 +223,10 @@ impl RenderBufferAllocator {
 
                 let staging_allocation = staging_buffer.allocation.as_ref().unwrap();
 
-                self.device.single_time_command(|device, command_buffer| {
-                    let regions = BufferCopy::default()
-                        .size(buffer.size)
-                        .src_offset(0)
-                        .dst_offset(0);
+                self.device.single_time_command(|cmd_buf| {
+                    let regions = BufferCopy::default().size(buffer.size).src_offset(0).dst_offset(0);
 
-                    device.handle.cmd_copy_buffer(command_buffer, buffer.buffer, staging_buffer.buffer, slice::from_ref(&regions));
+                    self.device.handle.cmd_copy_buffer(cmd_buf, buffer.buffer, staging_buffer.buffer, slice::from_ref(&regions));
                 })?;
 
                 let src_ptr = staging_allocation.mapped_ptr().ok_or_else(|| anyhow!("Failed to get mapped pointer for staging buffer"))?.as_ptr() as *const u8;

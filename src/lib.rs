@@ -1,18 +1,20 @@
-use crate::vk_context::descriptor_set::{DescriptorId, WrappedDescriptorSet};
-use crate::vk_context::pipeline::{PipelineDesc, WrappedPipeline};
+use crate::rt::{blas, tlas};
 use anyhow::{anyhow, Result};
 use ash::vk;
-use ash::vk::BufferUsageFlags;
-use gpu_allocator::MemoryLocation;
-use image::{ImageBuffer, ImageFormat};
+use log::error;
 use std::ffi::{c_char, CStr};
 use std::mem;
 use std::path::Path;
+use ash::vk::BufferUsageFlags;
+use gpu_allocator::MemoryLocation;
+use image::{ImageBuffer, ImageFormat};
+use crate::vk_context::descriptor_set::{DescriptorId, WrappedDescriptorSet};
+use crate::vk_context::pipeline::{PipelineDesc, WrappedPipeline};
 
+pub mod model;
 pub mod render_resource;
-pub mod vk_context;
 pub mod rt;
-mod model;
+pub mod vk_context;
 
 #[inline]
 pub fn lib_root() -> &'static Path {
@@ -20,6 +22,7 @@ pub fn lib_root() -> &'static Path {
 }
 
 #[inline]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cstr_to_str_unchecked(vk_str: &[c_char]) -> &str {
     CStr::from_ptr(vk_str.as_ptr()).to_str().unwrap()
 }
@@ -35,9 +38,8 @@ pub fn cstr_to_str(vk_str: &[c_char]) -> Result<&str> {
     }
 }
 
-#[test]
 pub fn test_hello_world() -> Result<()> {
-    let (device, buffer_allocator, include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
+    let (device, buffer_allocator, _, include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
 
     let pipeline_desc = PipelineDesc::default().compute_path("render.comp.glsl".into());
     let pipeline = WrappedPipeline::new(device.clone(), &buffer_allocator, pipeline_desc, &include_structure, None)?;
@@ -52,29 +54,48 @@ pub fn test_hello_world() -> Result<()> {
     let workgroup_width = 16;
     let workgroup_height = 8;
 
-    device.single_time_command(|device, cmd_buf| unsafe {
+    device.single_time_command(|cmd_buf| unsafe {
         pipeline.bind(cmd_buf);
         descriptor.bind(cmd_buf, &pipeline);
 
-        device.cmd_dispatch(cmd_buf,
-                            (render_width + workgroup_width - 1) / workgroup_width,
-                            (render_height + workgroup_height - 1) / workgroup_height,
-                            1);
+        device.cmd_dispatch(
+            cmd_buf,
+            (render_width + workgroup_width - 1) / workgroup_width,
+            (render_height + workgroup_height - 1) / workgroup_height,
+            1,
+        );
     })?;
 
     let image_data: Vec<f32> = buffer_allocator.download_data(&buffer)?;
 
     let image = ImageBuffer::from_fn(render_width, render_height, |x, y| {
         let idx = ((y * render_width + x) * 3) as usize;
-        image::Rgba([
-            (image_data[idx] * 255.0) as u8,
-            (image_data[idx + 1] * 255.0) as u8,
-            (image_data[idx + 2] * 255.0) as u8,
-            255,
-        ])
+        image::Rgba([(image_data[idx] * 255.0) as u8, (image_data[idx + 1] * 255.0) as u8, (image_data[idx + 2] * 255.0) as u8, 255])
     });
 
     image.save_with_format(lib_root().join("output").join("hello_world.png"), ImageFormat::Png)?;
+
+    Ok(())
+}
+
+pub fn test_as() -> Result<()> {
+    let (device, buffer_allocator, image_manager, _include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
+
+    let model = model::load_gltf(device.clone(), &buffer_allocator, &image_manager, lib_root().join("models").join("cornell.gltf").to_str().unwrap())?;
+
+    let blas = model
+        .meshes
+        .iter()
+        .filter_map(|(mesh, _)| match blas::create_blas(device.clone(), &buffer_allocator, &mesh.mesh_buffer) {
+            Ok(blas) => Some(blas),
+            Err(error) => {
+                error!("{:?}", error);
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let _tlas = tlas::create_tlas(device.clone(), &buffer_allocator, &blas, &[model])?;
 
     Ok(())
 }

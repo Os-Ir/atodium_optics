@@ -1,4 +1,5 @@
 use crate::render_resource::render_buffer::{RenderBufferAllocator, RenderBufferAllocatorRef};
+use crate::render_resource::render_image::{ImageManager, ImageManagerRef};
 use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
 use crate::vk_context::shader_compiler::ShaderIncludeStructure;
 use anyhow::Result;
@@ -37,7 +38,7 @@ pub fn align_up(value: DeviceSize, alignment: DeviceSize) -> DeviceSize {
     (value + alignment - 1) & !(alignment - 1)
 }
 
-pub fn init_vulkan_context(enable_validation: bool, app_name: &str, app_version: u32) -> Result<(WrappedDeviceRef, RenderBufferAllocatorRef, ShaderIncludeStructure)> {
+pub fn init_vulkan_context(enable_validation: bool, app_name: &str, app_version: u32) -> Result<(WrappedDeviceRef, RenderBufferAllocatorRef, ImageManagerRef, ShaderIncludeStructure)> {
     let device: WrappedDeviceRef = WrappedDevice::new(
         enable_validation,
         &VALIDATION_LAYERS,
@@ -51,7 +52,9 @@ pub fn init_vulkan_context(enable_validation: bool, app_name: &str, app_version:
     .into();
 
     let buffer_allocator: RenderBufferAllocatorRef = RenderBufferAllocator::new(device.clone())?.into();
+    let image_manager: ImageManagerRef = ImageManager::new(device.clone(), buffer_allocator.clone()).into();
+
     let include_structure = shader_compiler::load_shaders();
 
-    Ok((device, buffer_allocator, include_structure))
+    Ok((device, buffer_allocator, image_manager, include_structure))
 }

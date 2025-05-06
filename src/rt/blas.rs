@@ -1,6 +1,8 @@
+use crate::model::mesh::MeshBuffer;
+use crate::model::vertex::Vertex;
 use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
-use crate::vk_context::device::WrappedDevice;
-use anyhow::Result;
+use crate::vk_context::device::WrappedDeviceRef;
+use anyhow::{anyhow, Result};
 use ash::vk::{
     AccelerationStructureBuildGeometryInfoKHR, AccelerationStructureBuildRangeInfoKHR, AccelerationStructureBuildSizesInfoKHR, AccelerationStructureBuildTypeKHR, AccelerationStructureCreateInfoKHR,
     AccelerationStructureGeometryDataKHR, AccelerationStructureGeometryKHR, AccelerationStructureGeometryTrianglesDataKHR, AccelerationStructureKHR, AccelerationStructureTypeKHR, BufferUsageFlags,
@@ -8,21 +10,30 @@ use ash::vk::{
 };
 use gpu_allocator::MemoryLocation;
 use std::slice;
-use crate::model::mesh::MeshBuffer;
-use crate::model::vertex::Vertex;
 
 pub struct Blas {
+    device: WrappedDeviceRef,
+
     pub handle: AccelerationStructureKHR,
-    pub buffer: RenderBuffer,
+    pub blas_buffer: RenderBuffer,
+    pub scratch_buffer: RenderBuffer,
 }
 
-pub fn create_blas(device: &WrappedDevice, allocator: &RenderBufferAllocator, mesh_buffer: &MeshBuffer) -> Result<Blas> {
+impl Drop for Blas {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.acceleration_device.destroy_acceleration_structure(self.handle, None);
+        }
+    }
+}
+
+pub fn create_blas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, mesh_buffer: &MeshBuffer) -> Result<Blas> {
     let vertex_device_addr = DeviceOrHostAddressConstKHR {
-        device_address: mesh_buffer.vertex_buffer.device_addr(),
+        device_address: mesh_buffer.vertex_buffer.device_addr().ok_or_else(|| anyhow!("Vertex buffer for creating BLAS is device address unsupported"))?,
     };
 
     let index_device_addr = DeviceOrHostAddressConstKHR {
-        device_address: mesh_buffer.index_buffer.device_addr(),
+        device_address: mesh_buffer.index_buffer.device_addr().ok_or_else(|| anyhow!("Vertex buffer for creating BLAS is device address unsupported"))?,
     };
 
     let triangles_data = AccelerationStructureGeometryTrianglesDataKHR::default()
@@ -57,7 +68,7 @@ pub fn create_blas(device: &WrappedDevice, allocator: &RenderBufferAllocator, me
 
     let blas_buffer = allocator.allocate(
         build_sizes.acceleration_structure_size,
-        BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR,
+        BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR,
         MemoryLocation::GpuOnly,
     )?;
 
@@ -70,7 +81,7 @@ pub fn create_blas(device: &WrappedDevice, allocator: &RenderBufferAllocator, me
 
     let scratch_buffer = allocator.allocate(
         build_sizes.build_scratch_size,
-        BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::STORAGE_BUFFER,
+        BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::STORAGE_BUFFER,
         MemoryLocation::GpuOnly,
     )?;
 
@@ -81,19 +92,21 @@ pub fn create_blas(device: &WrappedDevice, allocator: &RenderBufferAllocator, me
         .mode(BuildAccelerationStructureModeKHR::BUILD)
         .dst_acceleration_structure(blas)
         .scratch_data(DeviceOrHostAddressKHR {
-            device_address: scratch_buffer.device_addr(),
+            device_address: scratch_buffer.device_addr().unwrap(),
         });
 
     let build_range_info = vec![AccelerationStructureBuildRangeInfoKHR::default().primitive_count(triangle_count)];
 
-    device.single_time_command(|device, command_buffer| unsafe {
+    device.single_time_command(|cmd_buf| unsafe {
         device
             .acceleration_device
-            .cmd_build_acceleration_structures(command_buffer, slice::from_ref(&build_geometry_info), slice::from_ref(&build_range_info.as_slice()));
+            .cmd_build_acceleration_structures(cmd_buf, slice::from_ref(&build_geometry_info), slice::from_ref(&build_range_info.as_slice()));
     })?;
 
     Ok(Blas {
+        device,
         handle: blas,
-        buffer: blas_buffer,
+        blas_buffer,
+        scratch_buffer,
     })
 }

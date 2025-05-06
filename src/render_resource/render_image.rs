@@ -181,8 +181,9 @@ impl ImageManager {
             _ => return Err(anyhow!("Unsupported layout transition")),
         };
 
-        self.device.single_time_command(|device, command_buffer| unsafe {
-            device.cmd_pipeline_barrier(command_buffer, src_stage, dst_stage, DependencyFlags::empty(), &[], &[], slice::from_ref(&barrier))
+        self.device.single_time_command(|cmd_buf| unsafe {
+            self.device
+                .cmd_pipeline_barrier(cmd_buf, src_stage, dst_stage, DependencyFlags::empty(), &[], &[], slice::from_ref(&barrier))
         })?;
 
         Ok(())
@@ -199,13 +200,13 @@ impl ImageManager {
         let regions = [region];
 
         self.device
-            .single_time_command(|device, command_buffer| unsafe { device.cmd_copy_buffer_to_image(command_buffer, buffer.buffer, image, ImageLayout::TRANSFER_DST_OPTIMAL, &regions) })?;
+            .single_time_command(|cmd_buf| unsafe { self.device.cmd_copy_buffer_to_image(cmd_buf, buffer.buffer, image, ImageLayout::TRANSFER_DST_OPTIMAL, &regions) })?;
 
         Ok(())
     }
 
     pub fn create_image_from_pixels(&self, width: u32, height: u32, pixels: &[u8]) -> Result<RenderImage> {
-        if pixels.len() != ((width * height) as usize) {
+        if pixels.len() != ((width * height * 4) as usize) {
             return Err(anyhow!("Pixel array size {} mismatch with width {} and height {}", pixels.len(), width, height));
         }
 
@@ -216,7 +217,7 @@ impl ImageManager {
         let (image, image_memory) = self.allocate_image(
             width,
             height,
-            Format::R8G8B8A8_SRGB,
+            Format::R8G8B8A8_UNORM,
             ImageTiling::OPTIMAL,
             ImageUsageFlags::TRANSFER_DST | ImageUsageFlags::SAMPLED,
             MemoryPropertyFlags::DEVICE_LOCAL,
@@ -226,7 +227,7 @@ impl ImageManager {
         self.copy_buffer_to_image(&staging_buffer, image, width, height)?;
         self.transition_image_layout(image, ImageLayout::TRANSFER_DST_OPTIMAL, ImageLayout::SHADER_READ_ONLY_OPTIMAL)?;
 
-        let image_view = self.create_image_view(image, Format::R8G8B8A8_SRGB, ImageAspectFlags::COLOR)?;
+        let image_view = self.create_image_view(image, Format::R8G8B8A8_UNORM, ImageAspectFlags::COLOR)?;
 
         Ok(RenderImage {
             device: self.device.clone(),

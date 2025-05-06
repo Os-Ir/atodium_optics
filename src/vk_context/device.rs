@@ -6,8 +6,8 @@ use ash::vk::{
     ApplicationInfo, Bool32, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsageFlags, CommandPool, CommandPoolCreateFlags, CommandPoolCreateInfo,
     DebugUtilsMessageSeverityFlagsEXT, DebugUtilsMessageTypeFlagsEXT, DebugUtilsMessengerCallbackDataEXT, DebugUtilsMessengerCreateInfoEXT, DebugUtilsMessengerEXT, DeviceCreateInfo,
     DeviceQueueCreateInfo, FenceCreateInfo, MemoryPropertyFlags, MemoryRequirements, PhysicalDevice, PhysicalDeviceAccelerationStructureFeaturesKHR, PhysicalDeviceFeatures, PhysicalDeviceFeatures2,
-    PhysicalDeviceProperties, PhysicalDeviceRayTracingPipelineFeaturesKHR, PhysicalDeviceRayTracingPipelinePropertiesKHR, PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features,
-    PresentModeKHR, QueueFlags, SubmitInfo, SurfaceCapabilitiesKHR, SurfaceFormatKHR, SurfaceKHR,
+    PhysicalDeviceProperties, PhysicalDeviceRayTracingPipelineFeaturesKHR, PhysicalDeviceRayTracingPipelinePropertiesKHR, PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, QueueFlags,
+    SubmitInfo,
 };
 use log::{error, info};
 use std::collections::HashSet;
@@ -91,7 +91,16 @@ pub struct WrappedDevice {
 impl WrappedDevice {
     pub const ANYHOW_PARSE: fn() -> anyhow::Error = || unreachable!();
 
-    pub fn new(enable_validation: bool, validation_layers: &[&str], engine_name: &str, engine_version: u32, app_name: &str, app_version: u32, api_version: u32, device_extensions: &[&CStr]) -> Result<Self> {
+    pub fn new(
+        enable_validation: bool,
+        validation_layers: &[&str],
+        engine_name: &str,
+        engine_version: u32,
+        app_name: &str,
+        app_version: u32,
+        api_version: u32,
+        device_extensions: &[&CStr],
+    ) -> Result<Self> {
         unsafe {
             let entry = ash::Entry::linked();
             let instance = create_instance(&entry, enable_validation, validation_layers, engine_name, engine_version, app_name, app_version, api_version)?;
@@ -122,7 +131,7 @@ impl WrappedDevice {
         }
     }
 
-    pub fn single_time_command(&self, f: impl FnOnce(&WrappedDevice, CommandBuffer)) -> Result<()> {
+    pub fn single_time_command(&self, f: impl FnOnce(CommandBuffer)) -> Result<()> {
         unsafe {
             let queue = self.graphic_queue.lock().expect("Graphic queue is poisoned");
             let command_pool = self.single_time_command_pool.lock().expect("Single time command pool is poisoned");
@@ -132,17 +141,17 @@ impl WrappedDevice {
                 .level(CommandBufferLevel::PRIMARY)
                 .command_buffer_count(1);
 
-            let command_buffer = self.handle.allocate_command_buffers(&allocate_info)?[0];
+            let cmd_buf = self.handle.allocate_command_buffers(&allocate_info)?[0];
 
             let begin_info = CommandBufferBeginInfo::default().flags(CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
-            self.handle.begin_command_buffer(command_buffer, &begin_info)?;
+            self.handle.begin_command_buffer(cmd_buf, &begin_info)?;
 
-            f(self, command_buffer);
+            f(cmd_buf);
 
-            self.handle.end_command_buffer(command_buffer)?;
+            self.handle.end_command_buffer(cmd_buf)?;
 
-            let submit_info = SubmitInfo::default().command_buffers(slice::from_ref(&command_buffer));
+            let submit_info = SubmitInfo::default().command_buffers(slice::from_ref(&cmd_buf));
 
             let fence_info = FenceCreateInfo::default();
             let fence = self.handle.create_fence(&fence_info, None)?;
@@ -151,7 +160,7 @@ impl WrappedDevice {
             self.handle.queue_submit(*queue, slice::from_ref(&submit_info), fence)?;
 
             self.handle.wait_for_fences(slice::from_ref(&fence), true, u64::MAX)?;
-            self.handle.free_command_buffers(*command_pool, slice::from_ref(&command_buffer));
+            self.handle.free_command_buffers(*command_pool, slice::from_ref(&cmd_buf));
             self.handle.destroy_fence(fence, None);
 
             Ok(())
@@ -190,6 +199,7 @@ impl Drop for WrappedDevice {
     }
 }
 
+#[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn check_validation_layer_support(entry: &ash::Entry, validation_layers: &[&str]) -> bool {
     let layer_properties = if let Ok(properties) = entry.enumerate_instance_layer_properties() {
         properties
@@ -248,7 +258,17 @@ fn find_queue_family_info(instance: &ash::Instance, physical_device: PhysicalDev
     })
 }
 
-unsafe fn create_instance(entry: &ash::Entry, enable_validation: bool, validation_layers: &[&str], engine_name: &str, engine_version: u32, app_name: &str, app_version: u32, api_version: u32) -> Result<ash::Instance> {
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn create_instance(
+    entry: &ash::Entry,
+    enable_validation: bool,
+    validation_layers: &[&str],
+    engine_name: &str,
+    engine_version: u32,
+    app_name: &str,
+    app_version: u32,
+    api_version: u32,
+) -> Result<ash::Instance> {
     if enable_validation && !check_validation_layer_support(entry, validation_layers) {
         return Err(anyhow!("Validation layers are not available."));
     }
@@ -288,6 +308,7 @@ unsafe fn create_instance(entry: &ash::Entry, enable_validation: bool, validatio
     Ok(instance)
 }
 
+#[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn create_debug_messenger(entry: &ash::Entry, instance: &ash::Instance) -> Result<(debug_utils::Instance, DebugUtilsMessengerEXT)> {
     let debug_messenger_info = generate_debug_messenger_info();
     let instance = debug_utils::Instance::new(entry, instance);
@@ -296,6 +317,7 @@ unsafe fn create_debug_messenger(entry: &ash::Entry, instance: &ash::Instance) -
     Ok((instance, messenger))
 }
 
+#[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn check_physical_device(physical_device: PhysicalDevice, instance: &ash::Instance, device_extensions: &[&CStr]) -> Option<u32> {
     unsafe {
         let queue_family_index = find_queue_family_info(instance, physical_device);
@@ -327,6 +349,7 @@ unsafe fn check_physical_device(physical_device: PhysicalDevice, instance: &ash:
     }
 }
 
+#[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn select_physical_device(instance: &ash::Instance, device_extensions: &[&CStr]) -> Result<(PhysicalDevice, u32)> {
     let physical_devices = instance.enumerate_physical_devices()?;
 
@@ -363,6 +386,7 @@ unsafe fn select_physical_device(instance: &ash::Instance, device_extensions: &[
     Ok((physical_device, queue_family_index))
 }
 
+#[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn create_device(instance: &ash::Instance, physical_device: PhysicalDevice, queue_family_index: u32, device_extensions: &[&CStr]) -> Result<(ash::Device, vk::Queue)> {
     unsafe {
         let device_queue_info = DeviceQueueCreateInfo::default().queue_family_index(queue_family_index).queue_priorities(slice::from_ref(&1.0));
@@ -375,7 +399,10 @@ unsafe fn create_device(instance: &ash::Instance, physical_device: PhysicalDevic
 
         let mut acceleration_structure_features = PhysicalDeviceAccelerationStructureFeaturesKHR::default().acceleration_structure(true);
 
-        let mut vulkan_12_features = PhysicalDeviceVulkan12Features::default().descriptor_indexing(true).runtime_descriptor_array(true).buffer_device_address(true);
+        let mut vulkan_12_features = PhysicalDeviceVulkan12Features::default()
+            .descriptor_indexing(true)
+            .runtime_descriptor_array(true)
+            .buffer_device_address(true);
 
         let mut vulkan_13_features = PhysicalDeviceVulkan13Features::default().dynamic_rendering(true).synchronization2(true);
 
@@ -399,6 +426,7 @@ unsafe fn create_device(instance: &ash::Instance, physical_device: PhysicalDevic
     }
 }
 
+#[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn create_command_pool(device: &ash::Device, queue_family: u32) -> Result<CommandPool> {
     unsafe {
         let pool_info = CommandPoolCreateInfo::default().queue_family_index(queue_family).flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
@@ -407,13 +435,14 @@ unsafe fn create_command_pool(device: &ash::Device, queue_family: u32) -> Result
     }
 }
 
-pub unsafe fn create_acceleration_context(instance: &ash::Instance, device: &ash::Device) -> (ray_tracing_pipeline::Device, acceleration_structure::Device) {
+pub fn create_acceleration_context(instance: &ash::Instance, device: &ash::Device) -> (ray_tracing_pipeline::Device, acceleration_structure::Device) {
     let rt_pipeline_device = ray_tracing_pipeline::Device::new(instance, device);
     let acceleration_device = acceleration_structure::Device::new(instance, device);
 
     (rt_pipeline_device, acceleration_device)
 }
 
+#[allow(unsafe_op_in_unsafe_fn)]
 pub fn acquire_rt_properties(
     instance: &ash::Instance,
     physical_device: PhysicalDevice,

@@ -8,4 +8,6 @@ fn setup_logger() {
 
 fn main() {
     setup_logger();
+
+    atodium_optics::test_as().unwrap();
 }

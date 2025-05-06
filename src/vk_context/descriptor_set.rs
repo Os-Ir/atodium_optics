@@ -5,7 +5,7 @@ use crate::vk_context::shader_reflection::BindingMap;
 use anyhow::{Result, anyhow};
 use ash::vk::{
     AccelerationStructureKHR, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
-    DescriptorSetLayout, DescriptorType, WriteDescriptorSet, WriteDescriptorSetAccelerationStructureKHR,
+    DescriptorType, WriteDescriptorSet, WriteDescriptorSetAccelerationStructureKHR,
 };
 use std::slice;
 
