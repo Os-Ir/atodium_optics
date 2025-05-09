@@ -1,10 +1,11 @@
 use crate::model::RenderModel;
 use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
+use crate::rt;
 use crate::rt::blas::Blas;
 use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
 use anyhow::Result;
 use ash::vk::{
-    AccelerationStructureBuildGeometryInfoKHR, AccelerationStructureBuildRangeInfoKHR, AccelerationStructureBuildSizesInfoKHR, AccelerationStructureBuildTypeKHR, AccelerationStructureCreateInfoKHR,
+    AccelerationStructureBuildGeometryInfoKHR, AccelerationStructureBuildRangeInfoKHR, AccelerationStructureBuildSizesInfoKHR, AccelerationStructureBuildTypeKHR,
     AccelerationStructureDeviceAddressInfoKHR, AccelerationStructureGeometryDataKHR, AccelerationStructureGeometryInstancesDataKHR, AccelerationStructureGeometryKHR, AccelerationStructureInstanceKHR,
     AccelerationStructureKHR, AccelerationStructureReferenceKHR, AccelerationStructureTypeKHR, BufferUsageFlags, BuildAccelerationStructureFlagsKHR, BuildAccelerationStructureModeKHR,
     DeviceOrHostAddressConstKHR, DeviceOrHostAddressKHR, DeviceSize, GeometryFlagsKHR, GeometryInstanceFlagsKHR, GeometryTypeKHR, Packed24_8, TransformMatrixKHR,
@@ -17,6 +18,7 @@ pub struct Tlas {
     device: WrappedDeviceRef,
 
     pub handle: AccelerationStructureKHR,
+    pub tlas_buffer: RenderBuffer,
     pub instance_buffer: RenderBuffer,
 }
 
@@ -79,15 +81,15 @@ pub fn create_tlas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, 
     let acceleration_instances = create_acceleration_instance(&device, blas, models)?;
 
     let instance_buffer = allocator.allocate(
-        size_of_val(&acceleration_instances) as DeviceSize,
+        (acceleration_instances.len() * size_of::<AccelerationStructureInstanceKHR>()) as DeviceSize,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
         MemoryLocation::GpuOnly,
     )?;
 
-    allocator.upload_data(&instance_buffer, &acceleration_instances)?;
+    allocator.upload_data::<AccelerationStructureInstanceKHR>(&instance_buffer, &acceleration_instances)?;
 
     let geometry = AccelerationStructureGeometryKHR::default()
-        .flags(GeometryFlagsKHR::OPAQUE)
+        .flags(GeometryFlagsKHR::OPAQUE | GeometryFlagsKHR::NO_DUPLICATE_ANY_HIT_INVOCATION)
         .geometry_type(GeometryTypeKHR::INSTANCES)
         .geometry(AccelerationStructureGeometryDataKHR {
             instances: AccelerationStructureGeometryInstancesDataKHR::default().array_of_pointers(false).data(DeviceOrHostAddressConstKHR {
@@ -98,7 +100,7 @@ pub fn create_tlas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, 
     let mut build_geometry_info = AccelerationStructureBuildGeometryInfoKHR::default()
         .ty(AccelerationStructureTypeKHR::TOP_LEVEL)
         .mode(BuildAccelerationStructureModeKHR::BUILD)
-        .flags(BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE | BuildAccelerationStructureFlagsKHR::ALLOW_UPDATE)
+        .flags(BuildAccelerationStructureFlagsKHR::PREFER_FAST_TRACE | BuildAccelerationStructureFlagsKHR::ALLOW_COMPACTION)
         .geometries(slice::from_ref(&geometry));
 
     let acceleration_instances_len = acceleration_instances.len() as u32;
@@ -118,22 +120,11 @@ pub fn create_tlas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, 
 
     let scratch_buffer = allocator.allocate(
         acceleration_build_sizes.build_scratch_size,
-        BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::STORAGE_BUFFER,
+        BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::STORAGE_BUFFER,
         MemoryLocation::GpuOnly,
     )?;
 
-    let tlas_buffer = allocator.allocate(
-        acceleration_build_sizes.acceleration_structure_size,
-        BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR,
-        MemoryLocation::GpuOnly,
-    )?;
-
-    let tlas_info = AccelerationStructureCreateInfoKHR::default()
-        .ty(AccelerationStructureTypeKHR::TOP_LEVEL)
-        .buffer(tlas_buffer.buffer)
-        .size(acceleration_build_sizes.acceleration_structure_size);
-
-    let tlas = unsafe { device.acceleration_device.create_acceleration_structure(&tlas_info, None)? };
+    let (tlas, tlas_buffer) = rt::allocate_acceleration_structure(&device, &allocator, AccelerationStructureTypeKHR::TOP_LEVEL, acceleration_build_sizes)?;
 
     build_geometry_info = build_geometry_info.dst_acceleration_structure(tlas).scratch_data(DeviceOrHostAddressKHR {
         device_address: scratch_buffer.device_addr().unwrap(),
@@ -150,6 +141,7 @@ pub fn create_tlas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, 
     Ok(Tlas {
         device,
         handle: tlas,
+        tlas_buffer,
         instance_buffer,
     })
 }

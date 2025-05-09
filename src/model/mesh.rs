@@ -15,7 +15,7 @@ pub struct MeshBuffer {
 impl MeshBuffer {
     pub fn new(allocator: &RenderBufferAllocator, indices: Vec<u32>, vertices: Vec<Vertex>) -> Result<Self> {
         let index_buffer = allocator.allocate(
-            size_of_val(&indices) as DeviceSize,
+            (indices.len() * size_of::<u32>()) as DeviceSize,
             BufferUsageFlags::STORAGE_BUFFER
                 | BufferUsageFlags::TRANSFER_DST
                 | BufferUsageFlags::INDEX_BUFFER
@@ -24,10 +24,10 @@ impl MeshBuffer {
             MemoryLocation::GpuOnly,
         )?;
 
-        allocator.upload_data(&index_buffer, &indices)?;
+        allocator.upload_data::<u32>(&index_buffer, &indices)?;
 
         let vertex_buffer = allocator.allocate(
-            size_of_val(&vertices) as DeviceSize,
+            (vertices.len() * size_of::<Vertex>()) as DeviceSize,
             BufferUsageFlags::STORAGE_BUFFER
                 | BufferUsageFlags::TRANSFER_DST
                 | BufferUsageFlags::VERTEX_BUFFER
@@ -36,7 +36,7 @@ impl MeshBuffer {
             MemoryLocation::GpuOnly,
         )?;
 
-        allocator.upload_data(&vertex_buffer, &vertices)?;
+        allocator.upload_data::<Vertex>(&vertex_buffer, &vertices)?;
 
         Ok(Self {
             indices,

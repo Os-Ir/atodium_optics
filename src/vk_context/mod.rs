@@ -20,11 +20,12 @@ pub const API_VERSION: u32 = vk::API_VERSION_1_3;
 
 pub const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
-pub const DEVICE_EXTENSIONS: [&CStr; 9] = [
+pub const DEVICE_EXTENSIONS: [&CStr; 10] = [
     ash::khr::synchronization2::NAME,
     ash::khr::maintenance4::NAME,
     ash::khr::acceleration_structure::NAME,
     ash::khr::ray_tracing_pipeline::NAME,
+    ash::khr::ray_query::NAME,
     ash::khr::buffer_device_address::NAME,
     ash::khr::deferred_host_operations::NAME,
     ash::khr::shader_float_controls::NAME,

@@ -3,11 +3,11 @@ use ash::ext::debug_utils;
 use ash::khr::{acceleration_structure, ray_tracing_pipeline};
 use ash::vk;
 use ash::vk::{
-    ApplicationInfo, Bool32, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsageFlags, CommandPool, CommandPoolCreateFlags, CommandPoolCreateInfo,
+    ApplicationInfo, Bool32, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferUsageFlags, CommandPool, CommandPoolCreateFlags, CommandPoolCreateInfo,
     DebugUtilsMessageSeverityFlagsEXT, DebugUtilsMessageTypeFlagsEXT, DebugUtilsMessengerCallbackDataEXT, DebugUtilsMessengerCreateInfoEXT, DebugUtilsMessengerEXT, DeviceCreateInfo,
     DeviceQueueCreateInfo, FenceCreateInfo, MemoryPropertyFlags, MemoryRequirements, PhysicalDevice, PhysicalDeviceAccelerationStructureFeaturesKHR, PhysicalDeviceFeatures, PhysicalDeviceFeatures2,
-    PhysicalDeviceProperties, PhysicalDeviceRayTracingPipelineFeaturesKHR, PhysicalDeviceRayTracingPipelinePropertiesKHR, PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, QueueFlags,
-    SubmitInfo,
+    PhysicalDeviceProperties, PhysicalDeviceRayQueryFeaturesKHR, PhysicalDeviceRayTracingPipelineFeaturesKHR, PhysicalDeviceRayTracingPipelinePropertiesKHR, PhysicalDeviceVulkan12Features,
+    PhysicalDeviceVulkan13Features, QueueFlags, SubmitInfo,
 };
 use log::{error, info};
 use std::collections::HashSet;
@@ -79,7 +79,8 @@ pub struct WrappedDevice {
     pub handle: ash::Device,
     pub graphic_queue: Mutex<vk::Queue>,
 
-    pub single_time_command_pool: Mutex<CommandPool>,
+    pub single_time_cmd_pool: CommandPool,
+    pub single_time_cmd_buf: CommandBuffer,
 
     pub rt_pipeline_device: ray_tracing_pipeline::Device,
     pub acceleration_device: acceleration_structure::Device,
@@ -107,7 +108,7 @@ impl WrappedDevice {
             let (debug_instance, debug_messenger) = create_debug_messenger(&entry, &instance)?;
             let (physical_device, queue_family_index) = select_physical_device(&instance, device_extensions)?;
             let (handle, graphic_queue) = create_device(&instance, physical_device, queue_family_index, device_extensions)?;
-            let single_time_command_pool = create_command_pool(&handle, queue_family_index)?;
+            let (single_time_cmd_pool, single_time_cmd_buf) = create_single_time_cmd_buf(&handle, queue_family_index)?;
             let (rt_pipeline_device, acceleration_device) = create_acceleration_context(&instance, &handle);
             let (rt_pipeline_properties, acceleration_structure_features) = acquire_rt_properties(&instance, physical_device);
 
@@ -122,7 +123,8 @@ impl WrappedDevice {
                 queue_family_index,
                 handle,
                 graphic_queue: Mutex::new(graphic_queue),
-                single_time_command_pool: Mutex::new(single_time_command_pool),
+                single_time_cmd_pool,
+                single_time_cmd_buf,
                 rt_pipeline_device,
                 acceleration_device,
                 rt_pipeline_properties,
@@ -133,35 +135,26 @@ impl WrappedDevice {
 
     pub fn single_time_command(&self, f: impl FnOnce(CommandBuffer)) -> Result<()> {
         unsafe {
-            let queue = self.graphic_queue.lock().expect("Graphic queue is poisoned");
-            let command_pool = self.single_time_command_pool.lock().expect("Single time command pool is poisoned");
-
-            let allocate_info = CommandBufferAllocateInfo::default()
-                .command_pool(*command_pool)
-                .level(CommandBufferLevel::PRIMARY)
-                .command_buffer_count(1);
-
-            let cmd_buf = self.handle.allocate_command_buffers(&allocate_info)?[0];
+            let queue = *self.graphic_queue.lock().expect("Graphic queue is poisoned");
 
             let begin_info = CommandBufferBeginInfo::default().flags(CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
-            self.handle.begin_command_buffer(cmd_buf, &begin_info)?;
+            self.begin_command_buffer(self.single_time_cmd_buf, &begin_info)?;
 
-            f(cmd_buf);
+            f(self.single_time_cmd_buf);
 
-            self.handle.end_command_buffer(cmd_buf)?;
+            self.end_command_buffer(self.single_time_cmd_buf)?;
 
-            let submit_info = SubmitInfo::default().command_buffers(slice::from_ref(&cmd_buf));
+            let submit_info = SubmitInfo::default().command_buffers(slice::from_ref(&self.single_time_cmd_buf));
 
             let fence_info = FenceCreateInfo::default();
-            let fence = self.handle.create_fence(&fence_info, None)?;
-            self.handle.reset_fences(slice::from_ref(&fence))?;
+            let fence = self.create_fence(&fence_info, None)?;
+            self.reset_fences(slice::from_ref(&fence))?;
 
-            self.handle.queue_submit(*queue, slice::from_ref(&submit_info), fence)?;
+            self.queue_submit(queue, slice::from_ref(&submit_info), fence)?;
 
-            self.handle.wait_for_fences(slice::from_ref(&fence), true, u64::MAX)?;
-            self.handle.free_command_buffers(*command_pool, slice::from_ref(&cmd_buf));
-            self.handle.destroy_fence(fence, None);
+            self.wait_for_fences(slice::from_ref(&fence), true, u64::MAX)?;
+            self.destroy_fence(fence, None);
 
             Ok(())
         }
@@ -190,7 +183,7 @@ impl Drop for WrappedDevice {
     fn drop(&mut self) {
         unsafe {
             self.handle.device_wait_idle().unwrap();
-            self.handle.destroy_command_pool(*self.single_time_command_pool.lock().unwrap(), None);
+            self.handle.destroy_command_pool(self.single_time_cmd_pool, None);
             self.handle.destroy_device(None);
             self.debug_instance.destroy_debug_utils_messenger(self.debug_messenger, None);
             self.instance.destroy_instance(None);
@@ -397,6 +390,8 @@ unsafe fn create_device(instance: &ash::Instance, physical_device: PhysicalDevic
 
         let mut ray_tracing_features = PhysicalDeviceRayTracingPipelineFeaturesKHR::default().ray_tracing_pipeline(true);
 
+        let mut ray_query_features = PhysicalDeviceRayQueryFeaturesKHR::default().ray_query(true);
+
         let mut acceleration_structure_features = PhysicalDeviceAccelerationStructureFeaturesKHR::default().acceleration_structure(true);
 
         let mut vulkan_12_features = PhysicalDeviceVulkan12Features::default()
@@ -409,6 +404,7 @@ unsafe fn create_device(instance: &ash::Instance, physical_device: PhysicalDevic
         let mut features = PhysicalDeviceFeatures2::default()
             .features(features)
             .push_next(&mut ray_tracing_features)
+            .push_next(&mut ray_query_features)
             .push_next(&mut acceleration_structure_features)
             .push_next(&mut vulkan_12_features)
             .push_next(&mut vulkan_13_features);
@@ -427,11 +423,19 @@ unsafe fn create_device(instance: &ash::Instance, physical_device: PhysicalDevic
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
-unsafe fn create_command_pool(device: &ash::Device, queue_family: u32) -> Result<CommandPool> {
+unsafe fn create_single_time_cmd_buf(device: &ash::Device, queue_family: u32) -> Result<(CommandPool, CommandBuffer)> {
     unsafe {
         let pool_info = CommandPoolCreateInfo::default().queue_family_index(queue_family).flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+        let cmd_pool = device.create_command_pool(&pool_info, None)?;
 
-        Ok(device.create_command_pool(&pool_info, None)?)
+        let cmd_buf_info = CommandBufferAllocateInfo::default()
+            .command_buffer_count(1)
+            .command_pool(cmd_pool)
+            .level(vk::CommandBufferLevel::PRIMARY);
+
+        let cmd_buf = device.allocate_command_buffers(&cmd_buf_info)?[0];
+
+        Ok((cmd_pool, cmd_buf))
     }
 }
 

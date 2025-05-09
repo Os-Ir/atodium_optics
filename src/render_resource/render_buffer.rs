@@ -163,7 +163,7 @@ impl RenderBufferAllocator {
     pub fn upload_data<T: Copy>(&self, buffer: &RenderBuffer, data: &[T]) -> Result<()> {
         unsafe {
             let data_ptr = data.as_ptr() as *const u8;
-            let data_size = size_of_val(data);
+            let data_size = data.len() * size_of::<T>();
 
             if buffer.memory_location != MemoryLocation::GpuOnly {
                 let allocation = buffer.allocation.as_ref().unwrap();
