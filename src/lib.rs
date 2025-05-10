@@ -3,7 +3,7 @@ use crate::vk_context::descriptor_set::{DescriptorId, WrappedDescriptorSet};
 use crate::vk_context::pipeline::{PipelineDesc, WrappedPipeline};
 use anyhow::{Result, anyhow};
 use ash::vk;
-use ash::vk::{AccessFlags, BufferUsageFlags, DependencyFlags, MemoryBarrier, PipelineStageFlags};
+use ash::vk::{AccessFlags, BufferUsageFlags, DependencyFlags, DeviceSize, MemoryBarrier, PipelineStageFlags};
 use glam::Vec4;
 use gpu_allocator::MemoryLocation;
 use image::{ImageBuffer, ImageFormat};
@@ -79,17 +79,32 @@ pub fn test_hello_world() -> Result<()> {
     Ok(())
 }
 
-pub fn test_cornell_hit() -> Result<()> {
-    let (device, buffer_allocator, image_manager, include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
+pub fn test_cornell() -> Result<()> {
+    let (device, allocator, image_manager, include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
 
-    let model = model::load_gltf(device.clone(), &buffer_allocator, &image_manager, lib_root().join("models/cornell.gltf").to_str().unwrap())?;
+    let model = model::load_gltf(device.clone(), &allocator, &image_manager, lib_root().join("models/cornell.gltf").to_str().unwrap())?;
 
     info!("Render model loaded");
+
+    let vertices = model
+        .meshes
+        .iter()
+        .map(|(mesh, transform)| mesh.mesh_buffer.vertices.iter().map(|&vertex| (*transform) * vertex.pos).collect::<Vec<_>>())
+        .flatten()
+        .collect::<Vec<_>>();
+
+    let vertices_buffer = allocator.allocate(
+        (vertices.len() * size_of::<Vec4>()) as DeviceSize,
+        BufferUsageFlags::STORAGE_BUFFER | BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER | BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
+        MemoryLocation::GpuOnly,
+    )?;
+
+    allocator.upload_data(&vertices_buffer, &vertices)?;
 
     let blas = model
         .meshes
         .iter()
-        .filter_map(|(mesh, _)| match blas::create_blas(device.clone(), &buffer_allocator, &mesh.mesh_buffer) {
+        .filter_map(|(mesh, _)| match blas::create_blas(device.clone(), &allocator, &mesh.mesh_buffer) {
             Ok(blas) => Some(blas),
             Err(error) => {
                 error!("{:?}", error);
@@ -100,18 +115,20 @@ pub fn test_cornell_hit() -> Result<()> {
 
     info!("Bottom-level acceleration structures created");
 
-    let tlas = tlas::create_tlas(device.clone(), &buffer_allocator, &blas, &[model])?;
+    let tlas = tlas::create_tlas(device.clone(), &allocator, &blas, slice::from_ref(&model))?;
 
     info!("Top-level acceleration structure created");
 
     let pipeline_desc = PipelineDesc::default().compute_path("render.comp.glsl".into());
-    let pipeline = WrappedPipeline::new(device.clone(), &buffer_allocator, pipeline_desc, &include_structure, None)?;
+    let pipeline = WrappedPipeline::new(device.clone(), &allocator, pipeline_desc, &include_structure, None)?;
 
-    let buffer = buffer_allocator.allocate(800 * 600 * 4 * 4, BufferUsageFlags::STORAGE_BUFFER, MemoryLocation::GpuToCpu)?;
+    let buffer = allocator.allocate(800 * 600 * 4 * 4, BufferUsageFlags::STORAGE_BUFFER, MemoryLocation::GpuToCpu)?;
 
     let descriptor = WrappedDescriptorSet::new(device.clone(), &pipeline, 0)?;
     descriptor.write_storage_buffer(DescriptorId::Index(0), &buffer)?;
     descriptor.write_acceleration_structure(DescriptorId::Index(1), tlas.handle)?;
+    descriptor.write_storage_buffer(DescriptorId::Index(2), &vertices_buffer)?;
+    descriptor.write_storage_buffer(DescriptorId::Index(3), &(model.meshes[0].0.mesh_buffer.index_buffer))?;
 
     let render_width = 800;
     let render_height = 600;
@@ -144,7 +161,7 @@ pub fn test_cornell_hit() -> Result<()> {
 
     info!("Compute shader command finished");
 
-    let image_data: Vec<Vec4> = buffer_allocator.download_data(&buffer)?;
+    let image_data: Vec<Vec4> = allocator.download_data(&buffer)?;
 
     let image = ImageBuffer::from_fn(render_width, render_height, |x, y| {
         let idx = (y * render_width + x) as usize;
