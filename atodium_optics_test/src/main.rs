@@ -9,5 +9,5 @@ fn setup_logger() {
 fn main() {
     setup_logger();
 
-    atodium_optics::test_cornell().unwrap();
+    atodium_optics::test_rt_pipeline().unwrap();
 }

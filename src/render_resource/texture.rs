@@ -1,4 +1,4 @@
-use crate::render_resource::render_image::{ImageManager, RenderImage};
+use crate::render_resource::render_image::{ImageAllocator, RenderImage};
 use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
 use anyhow::Result;
 use ash::prelude::VkResult;
@@ -31,8 +31,8 @@ impl Texture {
         }
     }
 
-    pub fn from_pixels(device: WrappedDeviceRef, image_manager: &ImageManager, width: u32, height: u32, pixels: &[u8]) -> Result<Self> {
-        let render_image = image_manager.create_image_from_pixels(width, height, pixels)?;
+    pub fn from_pixels(device: WrappedDeviceRef, image_allocator: &ImageAllocator, width: u32, height: u32, pixels: &[u8]) -> Result<Self> {
+        let render_image = image_allocator.allocate_from_pixels(width, height, pixels)?;
 
         let sampler = Self::default_sampler(&device, 1)?;
 

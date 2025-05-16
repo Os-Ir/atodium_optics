@@ -1,5 +1,5 @@
 use crate::render_resource::render_buffer::{RenderBufferAllocator, RenderBufferAllocatorRef};
-use crate::render_resource::render_image::{ImageManager, ImageManagerRef};
+use crate::render_resource::render_image::{ImageAllocator, ImageAllocatorRef};
 use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
 use crate::vk_context::shader_compiler::ShaderIncludeStructure;
 use anyhow::Result;
@@ -12,6 +12,7 @@ pub mod device;
 pub mod pipeline;
 pub mod shader_compiler;
 pub mod shader_reflection;
+pub mod bindless_descriptor;
 
 pub const ENGINE_NAME: &str = "atodium_optics";
 pub const ENGINE_VERSION: u32 = vk::make_api_version(0, 1, 1, 1);
@@ -39,7 +40,7 @@ pub fn align_up(value: DeviceSize, alignment: DeviceSize) -> DeviceSize {
     (value + alignment - 1) & !(alignment - 1)
 }
 
-pub fn init_vulkan_context(enable_validation: bool, app_name: &str, app_version: u32) -> Result<(WrappedDeviceRef, RenderBufferAllocatorRef, ImageManagerRef, ShaderIncludeStructure)> {
+pub fn init_vulkan_context(enable_validation: bool, app_name: &str, app_version: u32) -> Result<(WrappedDeviceRef, RenderBufferAllocatorRef, ImageAllocatorRef, ShaderIncludeStructure)> {
     let device: WrappedDeviceRef = WrappedDevice::new(
         enable_validation,
         &VALIDATION_LAYERS,
@@ -53,9 +54,9 @@ pub fn init_vulkan_context(enable_validation: bool, app_name: &str, app_version:
     .into();
 
     let buffer_allocator: RenderBufferAllocatorRef = RenderBufferAllocator::new(device.clone())?.into();
-    let image_manager: ImageManagerRef = ImageManager::new(device.clone(), buffer_allocator.clone()).into();
+    let image_allocator: ImageAllocatorRef = ImageAllocator::new(device.clone(), buffer_allocator.clone()).into();
 
     let include_structure = shader_compiler::load_shaders();
 
-    Ok((device, buffer_allocator, image_manager, include_structure))
+    Ok((device, buffer_allocator, image_allocator, include_structure))
 }

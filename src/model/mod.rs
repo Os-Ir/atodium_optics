@@ -1,7 +1,7 @@
 use crate::model::mesh::{MaterialType, MeshBuffer, RenderMaterial, RenderMesh};
 use crate::model::vertex::Vertex;
 use crate::render_resource::render_buffer::RenderBufferAllocator;
-use crate::render_resource::render_image::ImageManager;
+use crate::render_resource::render_image::ImageAllocator;
 use crate::render_resource::texture::Texture;
 use crate::vk_context::device::WrappedDeviceRef;
 use anyhow::{Result, anyhow};
@@ -124,7 +124,7 @@ pub fn load_gltf_node(buffer_allocator: &RenderBufferAllocator, node: &GltfNode,
     meshes
 }
 
-pub fn load_gltf(device: WrappedDeviceRef, buffer_allocator: &RenderBufferAllocator, image_manager: &ImageManager, path: &str) -> Result<RenderModel> {
+pub fn load_gltf(device: WrappedDeviceRef, buffer_allocator: &RenderBufferAllocator, image_allocator: &ImageAllocator, path: &str) -> Result<RenderModel> {
     info!("Loading GLTF model [ {} ]", path);
 
     let (gltf, buffers, mut images) = gltf::import(path)?;
@@ -145,7 +145,7 @@ pub fn load_gltf(device: WrappedDeviceRef, buffer_allocator: &RenderBufferAlloca
             return Err(anyhow!("Unsupported image format!"));
         }
 
-        let texture = Texture::from_pixels(device.clone(), image_manager, image.width, image.height, &image.pixels)?;
+        let texture = Texture::from_pixels(device.clone(), image_allocator, image.width, image.height, &image.pixels)?;
 
         textures.push(texture);
     }

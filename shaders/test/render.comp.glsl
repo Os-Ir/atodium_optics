@@ -109,8 +109,8 @@ void main() {
                 ray_direction = normalize(hit_result.normal + vec3(r * cos(phi), r * sin(phi), u));
             } else {
                 current_ray_color *= sky_color(ray_direction);
-
                 integrated_color += current_ray_color;
+
                 break;
             }
         }

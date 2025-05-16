@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use ash::ext::debug_utils;
 use ash::khr::{acceleration_structure, ray_tracing_pipeline};
 use ash::vk;
@@ -133,7 +133,7 @@ impl WrappedDevice {
         }
     }
 
-    pub fn single_time_command(&self, f: impl FnOnce(CommandBuffer)) -> Result<()> {
+    pub fn single_time_command<T>(&self, f: impl FnOnce(CommandBuffer) -> T) -> Result<T> {
         unsafe {
             let queue = *self.graphic_queue.lock().expect("Graphic queue is poisoned");
 
@@ -141,7 +141,7 @@ impl WrappedDevice {
 
             self.begin_command_buffer(self.single_time_cmd_buf, &begin_info)?;
 
-            f(self.single_time_cmd_buf);
+            let result = f(self.single_time_cmd_buf);
 
             self.end_command_buffer(self.single_time_cmd_buf)?;
 
@@ -156,7 +156,34 @@ impl WrappedDevice {
             self.wait_for_fences(slice::from_ref(&fence), true, u64::MAX)?;
             self.destroy_fence(fence, None);
 
-            Ok(())
+            Ok(result)
+        }
+    }
+
+    pub fn try_single_time_command<T>(&self, f: impl FnOnce(CommandBuffer) -> Result<T>) -> Result<T> {
+        unsafe {
+            let queue = *self.graphic_queue.lock().expect("Graphic queue is poisoned");
+
+            let begin_info = CommandBufferBeginInfo::default().flags(CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            self.begin_command_buffer(self.single_time_cmd_buf, &begin_info)?;
+
+            let result = f(self.single_time_cmd_buf)?;
+
+            self.end_command_buffer(self.single_time_cmd_buf)?;
+
+            let submit_info = SubmitInfo::default().command_buffers(slice::from_ref(&self.single_time_cmd_buf));
+
+            let fence_info = FenceCreateInfo::default();
+            let fence = self.create_fence(&fence_info, None)?;
+            self.reset_fences(slice::from_ref(&fence))?;
+
+            self.queue_submit(queue, slice::from_ref(&submit_info), fence)?;
+
+            self.wait_for_fences(slice::from_ref(&fence), true, u64::MAX)?;
+            self.destroy_fence(fence, None);
+
+            Ok(result)
         }
     }
 

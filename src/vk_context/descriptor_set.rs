@@ -1,11 +1,12 @@
 use crate::render_resource::render_buffer::RenderBuffer;
+use crate::render_resource::render_image::RenderImage;
 use crate::vk_context::device::WrappedDeviceRef;
 use crate::vk_context::pipeline::WrappedPipeline;
 use crate::vk_context::shader_reflection::BindingMap;
 use anyhow::{Result, anyhow};
 use ash::vk::{
-    AccelerationStructureKHR, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
-    DescriptorType, WriteDescriptorSet, WriteDescriptorSetAccelerationStructureKHR,
+    AccelerationStructureKHR, CommandBuffer, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet,
+    DescriptorSetAllocateInfo, DescriptorType, ImageLayout, Sampler, WriteDescriptorSet, WriteDescriptorSetAccelerationStructureKHR,
 };
 use std::slice;
 
@@ -127,21 +128,21 @@ impl WrappedDescriptorSet {
         Ok(())
     }
 
-    // pub fn write_storage_image(&self, descriptor_id: DescriptorId, image: &RenderImage) -> Result<()> {
-    //     let image_info = DescriptorImageInfo::default().image_layout(ImageLayout::GENERAL).image_view(image.image_view).sampler(Sampler::null());
-    //
-    //     let binding = descriptor_id.get_binding(&self.binding_map)?;
-    //
-    //     let descriptor_writes = WriteDescriptorSet::default()
-    //         .dst_set(self.descriptor_set)
-    //         .dst_binding(binding)
-    //         .descriptor_type(DescriptorType::STORAGE_IMAGE)
-    //         .image_info(slice::from_ref(&image_info));
-    //
-    //     unsafe { self.device.update_descriptor_sets(slice::from_ref(&descriptor_writes), &[]) };
-    //
-    //     Ok(())
-    // }
+    pub fn write_storage_image(&self, descriptor_id: DescriptorId, image: &RenderImage) -> Result<()> {
+        let image_info = DescriptorImageInfo::default().image_layout(ImageLayout::GENERAL).image_view(image.image_view).sampler(Sampler::null());
+
+        let binding = descriptor_id.get_binding(&self.binding_map)?;
+
+        let descriptor_writes = WriteDescriptorSet::default()
+            .dst_set(self.descriptor_set)
+            .dst_binding(binding)
+            .descriptor_type(DescriptorType::STORAGE_IMAGE)
+            .image_info(slice::from_ref(&image_info));
+
+        unsafe { self.device.update_descriptor_sets(slice::from_ref(&descriptor_writes), &[]) };
+
+        Ok(())
+    }
 
     pub fn write_acceleration_structure(&self, descriptor_id: DescriptorId, acceleration_structure: AccelerationStructureKHR) -> Result<()> {
         let binding = descriptor_id.get_binding(&self.binding_map)?;
