@@ -1,44 +1,22 @@
 use crate::render_resource::render_image::ImageDesc;
 use crate::rt::{blas, tlas};
+use crate::util::OutputFormat;
 use crate::vk_context::descriptor_set::{DescriptorId, WrappedDescriptorSet};
 use crate::vk_context::pipeline::{PipelineDesc, WrappedPipeline};
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use ash::vk;
 use ash::vk::{AccessFlags, BufferUsageFlags, DependencyFlags, DeviceSize, Format, ImageLayout, ImageTiling, ImageUsageFlags, MemoryBarrier, MemoryPropertyFlags, PipelineStageFlags};
 use glam::Vec4;
 use gpu_allocator::MemoryLocation;
 use image::{ImageBuffer, ImageFormat};
 use log::{error, info};
-use std::ffi::{CStr, c_char};
-use std::path::Path;
-use std::{mem, slice};
+use std::slice;
 
 pub mod model;
 pub mod render_resource;
 pub mod rt;
+pub mod util;
 pub mod vk_context;
-
-#[inline]
-pub fn lib_root() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-}
-
-#[inline]
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cstr_to_str_unchecked(vk_str: &[c_char]) -> &str {
-    CStr::from_ptr(vk_str.as_ptr()).to_str().unwrap()
-}
-
-#[inline]
-pub fn cstr_to_str(vk_str: &[c_char]) -> Result<&str> {
-    let nul_pos = vk_str.iter().position(|&c| c == 0);
-    let valid_slice = nul_pos.map(|pos| &vk_str[..=pos]);
-
-    match valid_slice {
-        Some(s) => unsafe { Ok(CStr::from_bytes_with_nul(mem::transmute(s))?.to_str()?) },
-        None => Err(anyhow!("Invalid UTF-8 sequence")),
-    }
-}
 
 pub fn test_hello_world() -> Result<()> {
     let (device, buffer_allocator, _, include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
@@ -75,7 +53,7 @@ pub fn test_hello_world() -> Result<()> {
         image::Rgb([image_data[idx], image_data[idx + 1], image_data[idx + 2]])
     });
 
-    image.save_with_format(lib_root().join("output").join("hello_world.hdr"), ImageFormat::Hdr)?;
+    image.save_with_format(util::lib_root().join("output").join("hello_world.hdr"), ImageFormat::Hdr)?;
 
     Ok(())
 }
@@ -83,7 +61,7 @@ pub fn test_hello_world() -> Result<()> {
 pub fn test_cornell() -> Result<()> {
     let (device, allocator, image_allocator, include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
 
-    let model = model::load_gltf(device.clone(), &allocator, &image_allocator, lib_root().join("models/cornell.gltf").to_str().unwrap())?;
+    let model = model::load_gltf(device.clone(), &allocator, &image_allocator, util::lib_root().join("models/cornell.gltf").to_str().unwrap())?;
 
     info!("Render model loaded");
 
@@ -162,19 +140,9 @@ pub fn test_cornell() -> Result<()> {
 
     info!("Compute shader command finished");
 
-    let image_data: Vec<Vec4> = allocator.download_data(&buffer)?;
+    let pixels: Vec<[f32; 4]> = allocator.download_data(&buffer)?;
 
-    let image = ImageBuffer::from_fn(render_width, render_height, |x, y| {
-        let idx = (y * render_width + x) as usize;
-
-        let r = image_data[idx].x;
-        let g = image_data[idx].y;
-        let b = image_data[idx].z;
-
-        image::Rgb([r, g, b])
-    });
-
-    image.save_with_format(lib_root().join("output").join("cornell.hdr"), ImageFormat::Hdr)?;
+    util::output_image(&util::lib_root().join("output").join("cornell.hdr"), render_width, render_height, &pixels, OutputFormat::Hdr)?;
 
     Ok(())
 }
@@ -182,7 +150,7 @@ pub fn test_cornell() -> Result<()> {
 pub fn test_rt_pipeline() -> Result<()> {
     let (device, allocator, image_allocator, include_structure) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
 
-    let model = model::load_gltf(device.clone(), &allocator, &image_allocator, lib_root().join("models/cornell.gltf").to_str().unwrap())?;
+    let model = model::load_gltf(device.clone(), &allocator, &image_allocator, util::lib_root().join("models/cornell.gltf").to_str().unwrap())?;
 
     info!("Render model loaded");
 
@@ -277,17 +245,7 @@ pub fn test_rt_pipeline() -> Result<()> {
 
     let pixels = image_allocator.acquire_pixels(&mut host_image, None)?;
 
-    let image = ImageBuffer::from_fn(render_width, render_height, |x, y| {
-        let idx = (y * render_width + x) as usize;
-
-        let r = pixels[idx][0];
-        let g = pixels[idx][1];
-        let b = pixels[idx][2];
-
-        image::Rgb([r, g, b])
-    });
-
-    image.save_with_format(lib_root().join("output").join("cornell_pipelined.hdr"), ImageFormat::Hdr)?;
+    util::output_image(&util::lib_root().join("output").join("cornell_pipelined.hdr"), render_width, render_height, &pixels, OutputFormat::Hdr)?;
 
     Ok(())
 }

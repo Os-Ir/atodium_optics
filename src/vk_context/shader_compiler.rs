@@ -30,7 +30,7 @@ impl ShaderIncludeStructure {
 
 #[inline]
 pub fn shader_base_dir() -> PathBuf {
-    crate::lib_root().join("shaders")
+    crate::util::lib_root().join("shaders")
 }
 
 #[inline]
@@ -64,14 +64,16 @@ lazy_static! {
 pub fn compile_glsl_shader(shader_path: &str, shader_kind: ShaderKind, include_structure: &ShaderIncludeStructure) -> Result<CompilationArtifact> {
     let shader_path_buf = shader_dir(shader_path);
 
+    info!("Compiling shader: [ {} ]", shader_path_buf.display());
+
     let mut options = CompileOptions::new()?;
 
     options.add_macro_definition("EP", Some("main"));
-    options.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_2 as u32);
+    options.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_3 as u32);
     options.set_generate_debug_info();
 
     options.set_include_callback(|include_request, _, _, _| {
-        let mut include_path = shader_path_buf.join(include_request);
+        let mut include_path = shader_path_buf.parent().unwrap().join(include_request);
 
         if !include_path.exists() {
             include_path = shader_dir(include_request);

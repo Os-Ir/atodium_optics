@@ -1,4 +1,5 @@
-use anyhow::{anyhow, Result};
+use crate::util;
+use anyhow::{Result, bail};
 use ash::ext::debug_utils;
 use ash::khr::{acceleration_structure, ray_tracing_pipeline};
 use ash::vk;
@@ -234,7 +235,7 @@ unsafe fn check_validation_layer_support(entry: &ash::Entry, validation_layers: 
     } else {
         info!("Instance available layers: ");
         for layer in layer_properties.iter() {
-            let layer_name = crate::cstr_to_str_unchecked(&layer.layer_name);
+            let layer_name = crate::util::cstr_to_str_unchecked(&layer.layer_name);
             info!("\t{}", layer_name);
         }
         info!("----------------------------------------");
@@ -243,7 +244,7 @@ unsafe fn check_validation_layer_support(entry: &ash::Entry, validation_layers: 
     for required_layer_name in validation_layers.iter() {
         let mut layer_found = false;
         for layer_property in layer_properties.iter() {
-            if (*required_layer_name) == crate::cstr_to_str_unchecked(&layer_property.layer_name) {
+            if (*required_layer_name) == crate::util::cstr_to_str_unchecked(&layer_property.layer_name) {
                 layer_found = true;
                 break;
             }
@@ -290,7 +291,7 @@ unsafe fn create_instance(
     api_version: u32,
 ) -> Result<ash::Instance> {
     if enable_validation && !check_validation_layer_support(entry, validation_layers) {
-        return Err(anyhow!("Validation layers are not available."));
+        bail!("Validation layers are not available.");
     }
 
     let cstr_app_name = CString::new(app_name)?;
@@ -350,7 +351,7 @@ unsafe fn check_physical_device(physical_device: PhysicalDevice, instance: &ash:
             .enumerate_device_extension_properties(physical_device)
             .ok()?
             .iter()
-            .map(|property| crate::cstr_to_str_unchecked(&property.extension_name).to_string())
+            .map(|property| crate::util::cstr_to_str_unchecked(&property.extension_name).to_string())
             .collect();
 
         let mut required_extensions: HashSet<String> = device_extensions.iter().map(|string| string.to_str().unwrap().to_string()).collect();
@@ -382,11 +383,11 @@ unsafe fn select_physical_device(instance: &ash::Instance, device_extensions: &[
 
             match check_physical_device(physical_device, instance, device_extensions) {
                 Some(queue_family_index) => {
-                    info!("\t{} | valid", crate::cstr_to_str_unchecked(&properties.device_name));
+                    info!("\t{} | valid", util::cstr_to_str_unchecked(&properties.device_name));
                     Some((physical_device, properties, queue_family_index))
                 }
                 None => {
-                    info!("\t{} | invalid", crate::cstr_to_str_unchecked(&properties.device_name));
+                    info!("\t{} | invalid", util::cstr_to_str_unchecked(&properties.device_name));
                     None
                 }
             }
@@ -394,13 +395,13 @@ unsafe fn select_physical_device(instance: &ash::Instance, device_extensions: &[
         .collect();
 
     if valid_physical_devices.is_empty() {
-        return Err(anyhow!("Failed to find suitable physical devices."));
+        bail!("Failed to find suitable physical devices.");
     }
 
     let (physical_device, properties, queue_family_index) = valid_physical_devices.remove(0);
 
     info!("Selected physical devices: ");
-    info!("\t{}", crate::cstr_to_str_unchecked(&properties.device_name));
+    info!("\t{}", util::cstr_to_str_unchecked(&properties.device_name));
     info!("----------------------------------------");
 
     Ok((physical_device, queue_family_index))

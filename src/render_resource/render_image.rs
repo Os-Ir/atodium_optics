@@ -148,7 +148,7 @@ impl ImageAllocator {
 
     pub fn allocate_from_pixels(&self, width: u32, height: u32, pixels: &[u8]) -> Result<RenderImage> {
         if pixels.len() != ((width * height * 4) as usize) {
-            return Err(anyhow!("Pixel array size {} mismatch with width {} and height {}", pixels.len(), width, height));
+            bail!("Pixel array size {} mismatch with width {} and height {}", pixels.len(), width, height);
         }
 
         let staging_buffer = self.buffer_allocator.allocate(pixels.len() as DeviceSize, BufferUsageFlags::TRANSFER_SRC, MemoryLocation::CpuToGpu)?;
@@ -179,7 +179,7 @@ impl ImageAllocator {
             ImageLayout::SHADER_READ_ONLY_OPTIMAL => (AccessFlags::HOST_WRITE, PipelineStageFlags::HOST),
             ImageLayout::COLOR_ATTACHMENT_OPTIMAL => (AccessFlags::COLOR_ATTACHMENT_WRITE, PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT),
             ImageLayout::GENERAL => (AccessFlags::HOST_WRITE, PipelineStageFlags::HOST),
-            _ => return Err(anyhow!("Unsupported layout transition")),
+            _ => bail!("Unsupported layout transition"),
         };
 
         let (dst_access_mask, dst_stage) = match new_layout {
@@ -188,7 +188,7 @@ impl ImageAllocator {
             ImageLayout::SHADER_READ_ONLY_OPTIMAL => (AccessFlags::SHADER_READ, PipelineStageFlags::FRAGMENT_SHADER),
             ImageLayout::COLOR_ATTACHMENT_OPTIMAL => (AccessFlags::COLOR_ATTACHMENT_WRITE, PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT),
             ImageLayout::GENERAL => (AccessFlags::SHADER_READ, PipelineStageFlags::FRAGMENT_SHADER),
-            _ => return Err(anyhow!("Unsupported layout transition")),
+            _ => bail!("Unsupported layout transition"),
         };
 
         let subresource_range = ImageSubresourceRange::default()
@@ -220,11 +220,11 @@ impl ImageAllocator {
 
     pub fn copy_image(&self, src_image: &RenderImage, dst_image: &RenderImage, mip_level: Option<u32>) -> Result<()> {
         if src_image.desc.aspect_flags != dst_image.desc.aspect_flags {
-            return Err(anyhow!("Image aspect flags mismatch"));
+            bail!("Image aspect flags mismatch");
         }
 
         if src_image.desc.width != dst_image.desc.width || src_image.desc.height != dst_image.desc.height || src_image.desc.depth != dst_image.desc.depth {
-            return Err(anyhow!("Image extend mismatch"));
+            bail!("Image extend mismatch");
         }
 
         let subresource_range = ImageSubresourceLayers::default()

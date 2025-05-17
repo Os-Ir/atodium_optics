@@ -4,34 +4,9 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int64: require
 #extension GL_EXT_scalar_block_layout: enable
 
-struct PayloadInfo {
-    uint rand_state;
-    vec3 color;
-    vec3 ray_origin;
-    vec3 ray_direction;
-    bool ray_hit_sky;
-};
+#include "rt.h.glsl"
 
 layout (location = 0) rayPayloadEXT PayloadInfo payload;
-
-layout (set = 0, binding = 0) uniform accelerationStructureEXT tlas;
-
-layout (set = 0, binding = 1, rgba32f) uniform image2D image_output;
-
-layout (set = 0, binding = 2, scalar) buffer Vertices {
-    vec4 data[];
-} vertices;
-
-layout (set = 0, binding = 3, scalar) buffer Indices {
-    uint data[];
-} indices;
-
-float gen_rand(inout uint rand_state) {
-    rand_state = rand_state * 747796405 + 1;
-    uint word = ((rand_state >> ((rand_state >> 28) + 4)) ^ rand_state) * 277803737;
-    word = (word >> 22) ^ word;
-    return float(word) / 4294967295.0f;
-}
 
 void main() {
     const ivec2 resolution = imageSize(image_output);

@@ -4,7 +4,7 @@ use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
 use crate::vk_context::shader_compiler;
 use crate::vk_context::shader_compiler::ShaderIncludeStructure;
 use crate::vk_context::shader_reflection::ShaderReflection;
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use ash::vk;
 use ash::vk::{
     BlendFactor, BlendOp, BufferUsageFlags, ColorComponentFlags, CommandBuffer, CompareOp, ComputePipelineCreateInfo, DeferredOperationKHR, DescriptorSetLayout, DeviceSize, DynamicState, Format,
@@ -202,7 +202,7 @@ impl WrappedPipeline {
         } else if pipeline_desc.is_raytracing_pipeline() {
             PipelineType::Raytracing
         } else {
-            return Err(anyhow!("Pipeline description is incomplete"));
+            bail!("Pipeline description is incomplete");
         };
 
         let (shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules) = match pipeline_type {

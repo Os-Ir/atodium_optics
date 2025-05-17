@@ -4,7 +4,7 @@ use crate::render_resource::render_buffer::RenderBufferAllocator;
 use crate::render_resource::render_image::ImageAllocator;
 use crate::render_resource::texture::Texture;
 use crate::vk_context::device::WrappedDeviceRef;
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use glam::{Mat4, Vec2, Vec3, Vec4};
 use gltf::Node as GltfNode;
 use gltf::buffer::Data as GltfBufferData;
@@ -142,7 +142,7 @@ pub fn load_gltf(device: WrappedDeviceRef, buffer_allocator: &RenderBufferAlloca
         }
 
         if image.format != GltfFormat::R8G8B8A8 {
-            return Err(anyhow!("Unsupported image format!"));
+            bail!("Unsupported image format!");
         }
 
         let texture = Texture::from_pixels(device.clone(), image_allocator, image.width, image.height, &image.pixels)?;

@@ -58,6 +58,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ash",
+ "bytemuck",
  "glam",
  "gltf",
  "gpu-allocator",
