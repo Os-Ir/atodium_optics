@@ -63,7 +63,15 @@ impl ShaderReflection {
             .flat_map(|(&set, descriptor_bindings)| {
                 let bindings: HashMap<String, ShaderBinding> = descriptor_bindings
                     .iter()
-                    .map(|(&binding, descriptor_info)| (descriptor_info.name.clone(), ShaderBinding::new(set, binding, descriptor_info.clone())))
+                    .map(|(&binding, descriptor_info)| {
+                        let name = if descriptor_info.name.is_empty() {
+                            format!("internal_name::<{}, {}>", set, binding)
+                        } else {
+                            descriptor_info.name.clone()
+                        };
+
+                        (name, ShaderBinding::new(set, binding, descriptor_info.clone()))
+                    })
                     .collect();
 
                 bindings

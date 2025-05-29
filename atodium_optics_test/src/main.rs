@@ -1,8 +1,7 @@
 use atodium_optics;
 
 fn setup_logger() {
-    unsafe { std::env::set_var("RUST_LOG", "info") };
-
+    std::env::set_var("RUST_LOG", "info");
     env_logger::init();
 }
 

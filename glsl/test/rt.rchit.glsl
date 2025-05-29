@@ -11,7 +11,9 @@ layout (location = 0) rayPayloadInEXT PayloadInfo payload;
 hitAttributeEXT vec2 hit_uv;
 
 void main() {
-    HitResult hit_result = get_hit_result(gl_PrimitiveID, hit_uv, gl_WorldRayDirectionEXT);
+    const vec3 ray_direction = gl_WorldRayDirectionEXT;
+
+    HitResult hit_result = get_hit_result(gl_PrimitiveID, hit_uv, ray_direction);
 
     const float phi = 6.2831853 * gen_rand(payload.rand_state);
     const float u = 2.0 * gen_rand(payload.rand_state) - 1.0;

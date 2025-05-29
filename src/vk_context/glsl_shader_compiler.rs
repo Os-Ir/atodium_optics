@@ -1,17 +1,15 @@
 use crate::vk_context::descriptor_set;
 use crate::vk_context::device::WrappedDevice;
 use crate::vk_context::shader_reflection::ShaderReflection;
-use anyhow::{Result, anyhow};
-use ash::vk::{
-    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PushConstantRange, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags,
-};
+use anyhow::{anyhow, Result};
+use ash::vk::{DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PushConstantRange, ShaderStageFlags};
 use lazy_static::lazy_static;
 use log::{error, info};
 use rspirv_reflect::BindingCount;
 use shaderc::{CompilationArtifact, CompileOptions, EnvVersion, ResolvedInclude, ShaderKind, TargetEnv};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 pub struct ShaderIncludeStructure {
@@ -29,17 +27,17 @@ impl ShaderIncludeStructure {
 }
 
 #[inline]
-pub fn shader_base_dir() -> PathBuf {
-    crate::util::lib_root().join("shaders")
+pub fn glsl_shader_base_dir() -> PathBuf {
+    crate::util::lib_root().join("glsl")
 }
 
 #[inline]
-pub fn shader_dir(shader_path: &str) -> PathBuf {
-    shader_base_dir().join(shader_path)
+pub fn glsl_shader_dir(shader_path: impl AsRef<Path>) -> PathBuf {
+    glsl_shader_base_dir().join(shader_path)
 }
 
 pub fn load_shaders() -> ShaderIncludeStructure {
-    let shader_sources = WalkDir::new(shader_base_dir())
+    let shader_sources = WalkDir::new(glsl_shader_base_dir())
         .into_iter()
         .filter_map(|entry| {
             let entry = entry.ok()?;
@@ -48,7 +46,7 @@ pub fn load_shaders() -> ShaderIncludeStructure {
                 return None;
             }
 
-            info!("Loading shader: [ {} ]", entry.path().display());
+            info!("Loading GLSL shader: [ {} ]", entry.path().display());
 
             fs::read_to_string(entry.path()).ok().map(|content| (entry.into_path(), content))
         })
@@ -62,7 +60,7 @@ lazy_static! {
 }
 
 pub fn compile_glsl_shader(shader_path: &str, shader_kind: ShaderKind, include_structure: &ShaderIncludeStructure) -> Result<CompilationArtifact> {
-    let shader_path_buf = shader_dir(shader_path);
+    let shader_path_buf = glsl_shader_dir(shader_path);
 
     info!("Compiling shader: [ {} ]", shader_path_buf.display());
 
@@ -76,7 +74,7 @@ pub fn compile_glsl_shader(shader_path: &str, shader_kind: ShaderKind, include_s
         let mut include_path = shader_path_buf.parent().unwrap().join(include_request);
 
         if !include_path.exists() {
-            include_path = shader_dir(include_request);
+            include_path = glsl_shader_dir(include_request);
         }
 
         let include_source = include_structure
@@ -167,10 +165,4 @@ pub fn create_pipeline_layout(
     let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None).expect("Failed to create pipeline layout") };
 
     (pipeline_layout, descriptor_set_layouts, push_constant_ranges)
-}
-
-pub fn create_shader_module(device: &WrappedDevice, shader_code: &[u32]) -> Result<ShaderModule> {
-    let shader_info = ShaderModuleCreateInfo::default().code(shader_code);
-
-    Ok(unsafe { device.create_shader_module(&shader_info, None) }?)
 }

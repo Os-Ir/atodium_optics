@@ -1,12 +1,12 @@
 use crate::vk_context::device::WrappedDeviceRef;
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 use ash::vk::{Buffer, BufferCopy, BufferCreateInfo, BufferDeviceAddressInfo, BufferUsageFlags, CommandBuffer, DeviceAddress, DeviceSize, IndexType, SharingMode};
 use core::slice;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator as GpuAllocator, AllocatorCreateDesc};
 use gpu_allocator::{AllocatorDebugSettings, MemoryLocation};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
-use std::{cmp, ptr};
+use std::{cmp, mem, ptr};
 
 pub struct RenderBuffer {
     pub device: WrappedDeviceRef,
@@ -163,7 +163,7 @@ impl RenderBufferAllocator {
     pub fn upload_data<T: Copy>(&self, buffer: &RenderBuffer, data: &[T]) -> Result<()> {
         unsafe {
             let data_ptr = data.as_ptr() as *const u8;
-            let data_size = data.len() * size_of::<T>();
+            let data_size = data.len() * mem::size_of::<T>();
 
             if buffer.memory_location != MemoryLocation::GpuOnly {
                 let allocation = buffer.allocation.as_ref().unwrap();
@@ -193,7 +193,7 @@ impl RenderBufferAllocator {
 
     pub fn download_data<T: Copy>(&self, buffer: &RenderBuffer) -> Result<Vec<T>> {
         unsafe {
-            let type_size = size_of::<T>();
+            let type_size = mem::size_of::<T>();
 
             if type_size == 0 {
                 bail!("Cannot download data for zero-sized type <T>");

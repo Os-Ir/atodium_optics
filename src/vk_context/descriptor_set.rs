@@ -1,13 +1,15 @@
 use crate::render_resource::render_buffer::RenderBuffer;
 use crate::render_resource::render_image::RenderImage;
+use crate::rt::tlas::Tlas;
 use crate::vk_context::device::WrappedDeviceRef;
 use crate::vk_context::pipeline::WrappedPipeline;
 use crate::vk_context::shader_reflection::BindingMap;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use ash::vk::{
-    AccelerationStructureKHR, CommandBuffer, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet,
-    DescriptorSetAllocateInfo, DescriptorType, ImageLayout, Sampler, WriteDescriptorSet, WriteDescriptorSetAccelerationStructureKHR,
+    CommandBuffer, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
+    DescriptorType, ImageLayout, Sampler, WriteDescriptorSet, WriteDescriptorSetAccelerationStructureKHR,
 };
+use std::collections::HashMap;
 use std::slice;
 
 pub fn map_rspirv_descriptor_type(rspirv_type: rspirv_reflect::DescriptorType) -> DescriptorType {
@@ -68,12 +70,12 @@ impl WrappedDescriptorSet {
     pub fn new(device: WrappedDeviceRef, pipeline: &WrappedPipeline, descriptor_set_index: usize) -> Result<Self> {
         let layout = pipeline.descriptor_set_layouts[descriptor_set_index];
 
-        let descriptor_pool_sizes: Vec<DescriptorPoolSize> = pipeline
-            .reflection
-            .binding_map
-            .values()
-            .map(|val| DescriptorPoolSize::default().ty(map_rspirv_descriptor_type(val.info.ty)).descriptor_count(1))
-            .collect();
+        let mut descriptor_pool_sizes: HashMap<DescriptorType, u32> = HashMap::new();
+        pipeline.reflection.binding_map.values().for_each(|val| {
+            *descriptor_pool_sizes.entry(map_rspirv_descriptor_type(val.info.ty)).or_insert(0) += 1;
+        });
+
+        let descriptor_pool_sizes: Vec<DescriptorPoolSize> = descriptor_pool_sizes.iter().map(|(&ty, &count)| DescriptorPoolSize::default().ty(ty).descriptor_count(count)).collect();
 
         let descriptor_pool = {
             let descriptor_pool_info = DescriptorPoolCreateInfo::default()
@@ -144,10 +146,10 @@ impl WrappedDescriptorSet {
         Ok(())
     }
 
-    pub fn write_acceleration_structure(&self, descriptor_id: DescriptorId, acceleration_structure: AccelerationStructureKHR) -> Result<()> {
+    pub fn write_tlas(&self, descriptor_id: DescriptorId, tlas: &Tlas) -> Result<()> {
         let binding = descriptor_id.get_binding(&self.binding_map)?;
 
-        let mut descriptor_info = WriteDescriptorSetAccelerationStructureKHR::default().acceleration_structures(slice::from_ref(&acceleration_structure));
+        let mut descriptor_info = WriteDescriptorSetAccelerationStructureKHR::default().acceleration_structures(slice::from_ref(&tlas.handle));
 
         let descriptor_writes = WriteDescriptorSet::default()
             .dst_set(self.descriptor_set)

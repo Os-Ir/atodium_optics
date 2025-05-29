@@ -1,7 +1,7 @@
 use crate::render_resource::render_buffer::{RenderBufferAllocator, RenderBufferAllocatorRef};
 use crate::render_resource::render_image::{ImageAllocator, ImageAllocatorRef};
 use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
-use crate::vk_context::shader_compiler::ShaderIncludeStructure;
+use crate::vk_context::glsl_shader_compiler::ShaderIncludeStructure;
 use anyhow::Result;
 use ash::vk;
 use ash::vk::DeviceSize;
@@ -10,9 +10,10 @@ use std::ffi::CStr;
 pub mod descriptor_set;
 pub mod device;
 pub mod pipeline;
-pub mod shader_compiler;
+pub mod glsl_shader_compiler;
 pub mod shader_reflection;
 pub mod bindless_descriptor;
+pub mod shader_builder;
 
 pub const ENGINE_NAME: &str = "atodium_optics";
 pub const ENGINE_VERSION: u32 = vk::make_api_version(0, 1, 1, 1);
@@ -56,7 +57,7 @@ pub fn init_vulkan_context(enable_validation: bool, app_name: &str, app_version:
     let buffer_allocator: RenderBufferAllocatorRef = RenderBufferAllocator::new(device.clone())?.into();
     let image_allocator: ImageAllocatorRef = ImageAllocator::new(device.clone(), buffer_allocator.clone()).into();
 
-    let include_structure = shader_compiler::load_shaders();
+    let include_structure = glsl_shader_compiler::load_shaders();
 
     Ok((device, buffer_allocator, image_allocator, include_structure))
 }

@@ -1,6 +1,6 @@
 use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocatorRef};
 use crate::vk_context::device::WrappedDeviceRef;
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 use ash::vk::{
     AccessFlags, BufferImageCopy, BufferUsageFlags, DependencyFlags, DeviceMemory, DeviceSize, Extent3D, Format, Image, ImageAspectFlags, ImageCopy, ImageCreateInfo, ImageLayout, ImageMemoryBarrier,
     ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView, ImageViewCreateInfo, ImageViewType, MemoryAllocateInfo, MemoryPropertyFlags, Offset3D,
@@ -8,6 +8,7 @@ use ash::vk::{
 };
 use core::slice;
 use gpu_allocator::MemoryLocation;
+use std::mem;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -53,11 +54,19 @@ impl ImageDesc {
     }
 
     pub fn image_type(&self) -> ImageType {
-        if self.depth > 1 { ImageType::TYPE_3D } else { ImageType::TYPE_2D }
+        if self.depth > 1 {
+            ImageType::TYPE_3D
+        } else {
+            ImageType::TYPE_2D
+        }
     }
 
     pub fn image_view_type(&self) -> ImageViewType {
-        if self.depth > 1 { ImageViewType::TYPE_3D } else { ImageViewType::TYPE_2D }
+        if self.depth > 1 {
+            ImageViewType::TYPE_3D
+        } else {
+            ImageViewType::TYPE_2D
+        }
     }
 }
 
@@ -82,6 +91,10 @@ impl RenderImage {
             image_memory,
             current_layout,
         }
+    }
+
+    pub fn extent(&self) -> Extent3D {
+        Extent3D::default().width(self.desc.width).height(self.desc.height).depth(self.desc.depth)
     }
 }
 
@@ -251,9 +264,9 @@ impl ImageAllocator {
         }
 
         let pixel_size = match image.desc.format {
-            Format::R32G32B32A32_SFLOAT => 4 * size_of::<f32>(),
-            Format::R8G8B8A8_UNORM => 4 * size_of::<u32>(),
-            Format::R8G8B8A8_SRGB => 4 * size_of::<u32>(),
+            Format::R32G32B32A32_SFLOAT => 4 * mem::size_of::<f32>(),
+            Format::R8G8B8A8_UNORM => 4 * mem::size_of::<u32>(),
+            Format::R8G8B8A8_SRGB => 4 * mem::size_of::<u32>(),
             _ => bail!("Unsupported image format: {:?}", image.desc.format),
         };
 

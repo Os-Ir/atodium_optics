@@ -10,7 +10,7 @@ use ash::vk::{
     BuildAccelerationStructureModeKHR, DeviceOrHostAddressConstKHR, DeviceOrHostAddressKHR, DeviceSize, Format, GeometryFlagsKHR, GeometryTypeKHR, IndexType,
 };
 use gpu_allocator::MemoryLocation;
-use std::slice;
+use std::{mem, slice};
 
 pub struct Blas {
     device: WrappedDeviceRef,
@@ -45,7 +45,7 @@ pub fn create_blas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, 
     let triangles_data = AccelerationStructureGeometryTrianglesDataKHR::default()
         .vertex_data(vertex_device_addr)
         .vertex_format(Format::R32G32B32_SFLOAT)
-        .vertex_stride(size_of::<Vertex>() as DeviceSize)
+        .vertex_stride(mem::size_of::<Vertex>() as DeviceSize)
         .max_vertex(mesh_buffer.vertices.len() as u32)
         .index_type(IndexType::UINT32)
         .index_data(index_device_addr);

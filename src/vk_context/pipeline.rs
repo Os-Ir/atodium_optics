@@ -1,33 +1,33 @@
 use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
 use crate::vk_context;
 use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
-use crate::vk_context::shader_compiler;
-use crate::vk_context::shader_compiler::ShaderIncludeStructure;
+use crate::vk_context::glsl_shader_compiler;
+use crate::vk_context::shader_builder::SpirvShaders;
 use crate::vk_context::shader_reflection::ShaderReflection;
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 use ash::vk;
 use ash::vk::{
     BlendFactor, BlendOp, BufferUsageFlags, ColorComponentFlags, CommandBuffer, CompareOp, ComputePipelineCreateInfo, DeferredOperationKHR, DescriptorSetLayout, DeviceSize, DynamicState, Format,
     FrontFace, GraphicsPipelineCreateInfo, LogicOp, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
     PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineMultisampleStateCreateInfo,
     PipelineRasterizationStateCreateInfo, PipelineRenderingCreateInfo, PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
-    PrimitiveTopology, RayTracingPipelineCreateInfoKHR, RayTracingShaderGroupCreateInfoKHR, RayTracingShaderGroupTypeKHR, RenderPass, SampleCountFlags, ShaderModule, ShaderStageFlags, StencilOp,
-    StencilOpState, StridedDeviceAddressRegionKHR, VertexInputAttributeDescription, VertexInputBindingDescription,
+    PrimitiveTopology, RayTracingPipelineCreateInfoKHR, RayTracingShaderGroupCreateInfoKHR, RayTracingShaderGroupTypeKHR, RenderPass, SampleCountFlags, ShaderModule, ShaderModuleCreateInfo,
+    ShaderStageFlags, StencilOp, StencilOpState, StridedDeviceAddressRegionKHR, VertexInputAttributeDescription, VertexInputBindingDescription,
 };
 use gpu_allocator::MemoryLocation;
-use shaderc::ShaderKind;
+use std::ffi::CString;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::slice;
 
 #[derive(Clone)]
 pub struct PipelineDesc {
-    pub vertex_path: Option<String>,
-    pub fragment_path: Option<String>,
-    pub compute_path: Option<String>,
-    pub raygen_path: Option<String>,
-    pub miss_path: Option<String>,
-    pub closest_hit_path: Option<String>,
+    pub vertex_name: Option<String>,
+    pub fragment_name: Option<String>,
+    pub compute_name: Option<String>,
+    pub raygen_name: Option<String>,
+    pub miss_name: Option<String>,
+    pub closest_hit_name: Option<String>,
 
     pub vertex_input_binding_descriptions: Vec<VertexInputBindingDescription>,
     pub vertex_input_attribute_descriptions: Vec<VertexInputAttributeDescription>,
@@ -89,12 +89,12 @@ pub struct RayTracingSbt {
 impl Default for PipelineDesc {
     fn default() -> Self {
         Self {
-            vertex_path: None,
-            fragment_path: None,
-            compute_path: None,
-            raygen_path: None,
-            miss_path: None,
-            closest_hit_path: None,
+            vertex_name: None,
+            fragment_name: None,
+            compute_name: None,
+            raygen_name: None,
+            miss_name: None,
+            closest_hit_name: None,
             vertex_input_binding_descriptions: Vec::new(),
             vertex_input_attribute_descriptions: Vec::new(),
             color_attachment_formats: Vec::new(),
@@ -105,44 +105,44 @@ impl Default for PipelineDesc {
 
 impl PipelineDesc {
     pub fn is_graphics_pipeline(&self) -> bool {
-        self.vertex_path.is_some() && self.fragment_path.is_some()
+        self.vertex_name.is_some() && self.fragment_name.is_some()
     }
 
     pub fn is_compute_pipeline(&self) -> bool {
-        self.compute_path.is_some()
+        self.compute_name.is_some()
     }
 
     pub fn is_raytracing_pipeline(&self) -> bool {
-        self.raygen_path.is_some() && self.miss_path.is_some() && self.closest_hit_path.is_some()
+        self.raygen_name.is_some() && self.miss_name.is_some() && self.closest_hit_name.is_some()
     }
 
-    pub fn vertex_path(mut self, path: String) -> Self {
-        self.vertex_path = Some(path);
+    pub fn vertex_name(mut self, name: String) -> Self {
+        self.vertex_name = Some(name);
         self
     }
 
-    pub fn fragment_path(mut self, path: String) -> Self {
-        self.fragment_path = Some(path);
+    pub fn fragment_name(mut self, name: String) -> Self {
+        self.fragment_name = Some(name);
         self
     }
 
-    pub fn compute_path(mut self, path: String) -> Self {
-        self.compute_path = Some(path);
+    pub fn compute_name(mut self, name: String) -> Self {
+        self.compute_name = Some(name);
         self
     }
 
-    pub fn raygen_path(mut self, path: String) -> Self {
-        self.raygen_path = Some(path);
+    pub fn raygen_name(mut self, name: String) -> Self {
+        self.raygen_name = Some(name);
         self
     }
 
-    pub fn miss_path(mut self, path: String) -> Self {
-        self.miss_path = Some(path);
+    pub fn miss_name(mut self, name: String) -> Self {
+        self.miss_name = Some(name);
         self
     }
 
-    pub fn hit_path(mut self, path: String) -> Self {
-        self.closest_hit_path = Some(path);
+    pub fn hit_name(mut self, name: String) -> Self {
+        self.closest_hit_name = Some(name);
         self
     }
 
@@ -169,21 +169,23 @@ impl PipelineDesc {
 
 impl Hash for PipelineDesc {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.vertex_path.hash(state);
-        self.fragment_path.hash(state);
-        self.color_attachment_formats.hash(state);
-        self.depth_stencil_attachment_format.hash(state);
+        self.vertex_name.hash(state);
+        self.fragment_name.hash(state);
+        self.compute_name.hash(state);
+        self.raygen_name.hash(state);
+        self.miss_name.hash(state);
+        self.closest_hit_name.hash(state);
     }
 }
 
 impl PartialEq for PipelineDesc {
     fn eq(&self, other: &Self) -> bool {
-        self.vertex_path == other.vertex_path
-            && self.fragment_path == other.fragment_path
-            && self.compute_path == other.compute_path
-            && self.raygen_path == other.raygen_path
-            && self.miss_path == other.miss_path
-            && self.closest_hit_path == other.closest_hit_path
+        self.vertex_name == other.vertex_name
+            && self.fragment_name == other.fragment_name
+            && self.compute_name == other.compute_name
+            && self.raygen_name == other.raygen_name
+            && self.miss_name == other.miss_name
+            && self.closest_hit_name == other.closest_hit_name
     }
 }
 
@@ -192,7 +194,7 @@ impl WrappedPipeline {
         device: WrappedDeviceRef,
         buffer_allocator: &RenderBufferAllocator,
         pipeline_desc: PipelineDesc,
-        include_structure: &ShaderIncludeStructure,
+        shaders: &SpirvShaders,
         bindless_descriptor_set_layout: Option<DescriptorSetLayout>,
     ) -> Result<WrappedPipeline> {
         let pipeline_type = if pipeline_desc.is_graphics_pipeline() {
@@ -205,21 +207,21 @@ impl WrappedPipeline {
             bail!("Pipeline description is incomplete");
         };
 
-        let (shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules) = match pipeline_type {
+        let (reflection, pipeline_layout, descriptor_set_layouts, shader_modules) = match pipeline_type {
             PipelineType::Graphics => create_graphics_shader_modules(
                 &device,
-                &pipeline_desc.vertex_path.as_ref().unwrap(),
-                &pipeline_desc.fragment_path.as_ref().unwrap(),
-                include_structure,
+                &pipeline_desc.vertex_name.as_ref().unwrap(),
+                &pipeline_desc.fragment_name.as_ref().unwrap(),
+                shaders,
                 bindless_descriptor_set_layout,
             ),
-            PipelineType::Compute => create_compute_shader_modules(&device, &pipeline_desc.compute_path.as_ref().unwrap(), include_structure, bindless_descriptor_set_layout),
+            PipelineType::Compute => create_compute_shader_modules(&device, &pipeline_desc.compute_name.as_ref().unwrap(), shaders, bindless_descriptor_set_layout),
             PipelineType::Raytracing => create_raytracing_shader_modules(
                 &device,
-                &pipeline_desc.raygen_path.as_ref().unwrap(),
-                &pipeline_desc.miss_path.as_ref().unwrap(),
-                &pipeline_desc.closest_hit_path.as_ref().unwrap(),
-                include_structure,
+                &pipeline_desc.raygen_name.as_ref().unwrap(),
+                &pipeline_desc.miss_name.as_ref().unwrap(),
+                &pipeline_desc.closest_hit_name.as_ref().unwrap(),
+                shaders,
                 bindless_descriptor_set_layout,
             ),
         }?;
@@ -227,14 +229,14 @@ impl WrappedPipeline {
         let handle = match pipeline_type {
             PipelineType::Graphics => create_graphics_pipeline(
                 &device,
-                shader_stage_create_infos,
+                &shader_modules,
                 &pipeline_desc.color_attachment_formats,
                 pipeline_desc.depth_stencil_attachment_format,
                 pipeline_layout,
                 &pipeline_desc,
             ),
-            PipelineType::Compute => create_compute_pipeline(&device, shader_stage_create_infos, pipeline_layout),
-            PipelineType::Raytracing => create_raytracing_pipeline(&device, shader_stage_create_infos, pipeline_layout),
+            PipelineType::Compute => create_compute_pipeline(&device, &shader_modules, pipeline_layout, &pipeline_desc),
+            PipelineType::Raytracing => create_raytracing_pipeline(&device, &shader_modules, pipeline_layout, &pipeline_desc),
         }?;
 
         let raytracing_sbt = if pipeline_type == PipelineType::Raytracing {
@@ -274,56 +276,52 @@ impl WrappedPipeline {
 
 fn create_graphics_shader_modules(
     device: &WrappedDevice,
-    vertex_shader_path: &str,
-    fragment_shader_path: &str,
-    include_structure: &ShaderIncludeStructure,
+    vertex_shader_name: &str,
+    fragment_shader_name: &str,
+    shaders: &SpirvShaders,
     bindless_descriptor_set_layout: Option<DescriptorSetLayout>,
-) -> Result<(
-    Vec<PipelineShaderStageCreateInfo<'static>>,
-    ShaderReflection,
-    PipelineLayout,
-    Vec<DescriptorSetLayout>,
-    Vec<ShaderModule>,
-)> {
-    let vertex_shader = shader_compiler::compile_glsl_shader(vertex_shader_path, ShaderKind::Vertex, include_structure)?;
-    let fragment_shader = shader_compiler::compile_glsl_shader(fragment_shader_path, ShaderKind::Fragment, include_structure)?;
+) -> Result<(ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>, Vec<ShaderModule>)> {
+    let vertex_shader = shaders.get(vertex_shader_name).ok_or_else(|| anyhow!("Vertex shader [ {} ] not found", vertex_shader_name))?;
+    let fragment_shader = shaders.get(fragment_shader_name).ok_or_else(|| anyhow!("Fragment shader [ {} ] not found", fragment_shader_name))?;
 
     let reflection = ShaderReflection::new(&[vertex_shader.as_binary_u8(), fragment_shader.as_binary_u8()])?;
 
-    let (pipeline_layout, descriptor_set_layouts, _) = shader_compiler::create_pipeline_layout(device, &reflection, bindless_descriptor_set_layout);
+    let (pipeline_layout, descriptor_set_layouts, _) = glsl_shader_compiler::create_pipeline_layout(device, &reflection, bindless_descriptor_set_layout);
 
-    let vertex_shader_module = shader_compiler::create_shader_module(device, vertex_shader.as_binary())?;
-    let fragment_shader_module = shader_compiler::create_shader_module(device, fragment_shader.as_binary())?;
-
-    let shader_entry_name = c"main";
-    let shader_stage_create_infos = vec![
-        PipelineShaderStageCreateInfo {
-            module: vertex_shader_module,
-            p_name: shader_entry_name.as_ptr(),
-            stage: ShaderStageFlags::VERTEX,
-            ..Default::default()
-        },
-        PipelineShaderStageCreateInfo {
-            module: fragment_shader_module,
-            p_name: shader_entry_name.as_ptr(),
-            stage: ShaderStageFlags::FRAGMENT,
-            ..Default::default()
-        },
-    ];
+    let vertex_shader_module = create_shader_module(device, vertex_shader.as_binary())?;
+    let fragment_shader_module = create_shader_module(device, fragment_shader.as_binary())?;
 
     let shader_modules = vec![vertex_shader_module, fragment_shader_module];
 
-    Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
+    Ok((reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
 }
 
 fn create_graphics_pipeline(
     device: &WrappedDevice,
-    shader_stage_create_infos: Vec<PipelineShaderStageCreateInfo>,
+    shader_modules: &[ShaderModule],
     color_attachment_formats: &[Format],
     depth_stencil_attachment_format: Format,
     pipeline_layout: PipelineLayout,
     pipeline_desc: &PipelineDesc,
 ) -> Result<Pipeline> {
+    let vertex_entry_name = CString::new(pipeline_desc.vertex_name.as_ref().unwrap().as_str())?;
+    let fragment_entry_name = CString::new(pipeline_desc.fragment_name.as_ref().unwrap().as_str())?;
+
+    let shader_stage_create_infos = vec![
+        PipelineShaderStageCreateInfo {
+            module: shader_modules[0],
+            p_name: vertex_entry_name.as_ptr(),
+            stage: ShaderStageFlags::VERTEX,
+            ..Default::default()
+        },
+        PipelineShaderStageCreateInfo {
+            module: shader_modules[1],
+            p_name: fragment_entry_name.as_ptr(),
+            stage: ShaderStageFlags::FRAGMENT,
+            ..Default::default()
+        },
+    ];
+
     let vertex_input_state_info = PipelineVertexInputStateCreateInfo::default()
         .vertex_attribute_descriptions(pipeline_desc.vertex_input_attribute_descriptions.as_slice())
         .vertex_binding_descriptions(pipeline_desc.vertex_input_binding_descriptions.as_slice());
@@ -399,38 +397,33 @@ fn create_graphics_pipeline(
 
 fn create_compute_shader_modules(
     device: &WrappedDevice,
-    compute_shader_path: &str,
-    include_structure: &ShaderIncludeStructure,
+    compute_shader_name: &str,
+    shaders: &SpirvShaders,
     bindless_descriptor_set_layout: Option<DescriptorSetLayout>,
-) -> Result<(
-    Vec<PipelineShaderStageCreateInfo<'static>>,
-    ShaderReflection,
-    PipelineLayout,
-    Vec<DescriptorSetLayout>,
-    Vec<ShaderModule>,
-)> {
-    let compute_shader = shader_compiler::compile_glsl_shader(compute_shader_path, ShaderKind::Compute, include_structure)?;
+) -> Result<(ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>, Vec<ShaderModule>)> {
+    let compute_shader = shaders.get(compute_shader_name).ok_or_else(|| anyhow!("Compute shader [ {} ] not found", compute_shader_name))?;
 
     let reflection = ShaderReflection::new(&[compute_shader.as_binary_u8()])?;
 
-    let (pipeline_layout, descriptor_set_layouts, _) = shader_compiler::create_pipeline_layout(device, &reflection, bindless_descriptor_set_layout);
+    let (pipeline_layout, descriptor_set_layouts, _) = glsl_shader_compiler::create_pipeline_layout(device, &reflection, bindless_descriptor_set_layout);
 
-    let compute_shader_module = shader_compiler::create_shader_module(device, compute_shader.as_binary())?;
+    let compute_shader_module = create_shader_module(device, compute_shader.as_binary())?;
 
-    let shader_entry_name = c"main";
+    let shader_modules = vec![compute_shader_module];
+
+    Ok((reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
+}
+
+fn create_compute_pipeline(device: &WrappedDevice, shader_modules: &[ShaderModule], pipeline_layout: PipelineLayout, pipeline_desc: &PipelineDesc) -> Result<Pipeline> {
+    let compute_entry_cstring = CString::new(pipeline_desc.compute_name.as_ref().unwrap().as_str())?;
+
     let shader_stage_create_infos = vec![PipelineShaderStageCreateInfo {
-        module: compute_shader_module,
-        p_name: shader_entry_name.as_ptr(),
+        module: shader_modules[0],
+        p_name: compute_entry_cstring.as_ptr(),
         stage: ShaderStageFlags::COMPUTE,
         ..Default::default()
     }];
 
-    let shader_modules = vec![compute_shader_module];
-
-    Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
-}
-
-fn create_compute_pipeline(device: &WrappedDevice, shader_stage_create_infos: Vec<PipelineShaderStageCreateInfo>, pipeline_layout: PipelineLayout) -> Result<Pipeline> {
     let compute_pipeline_info = ComputePipelineCreateInfo::default().stage(shader_stage_create_infos[0]).layout(pipeline_layout);
 
     match unsafe { device.create_compute_pipelines(PipelineCache::null(), slice::from_ref(&compute_pipeline_info), None) } {
@@ -441,57 +434,56 @@ fn create_compute_pipeline(device: &WrappedDevice, shader_stage_create_infos: Ve
 
 fn create_raytracing_shader_modules(
     device: &WrappedDevice,
-    raygen_shader_path: &str,
-    miss_shader_path: &str,
-    closest_hit_shader_path: &str,
-    include_structure: &ShaderIncludeStructure,
+    raygen_shader_name: &str,
+    miss_shader_name: &str,
+    closest_hit_shader_name: &str,
+    shaders: &SpirvShaders,
     bindless_descriptor_set_layout: Option<DescriptorSetLayout>,
-) -> Result<(
-    Vec<PipelineShaderStageCreateInfo<'static>>,
-    ShaderReflection,
-    PipelineLayout,
-    Vec<DescriptorSetLayout>,
-    Vec<ShaderModule>,
-)> {
-    let raygen_shader = shader_compiler::compile_glsl_shader(raygen_shader_path, ShaderKind::RayGeneration, include_structure)?;
-    let miss_shader = shader_compiler::compile_glsl_shader(miss_shader_path, ShaderKind::Miss, include_structure)?;
-    let closest_hit_shader = shader_compiler::compile_glsl_shader(closest_hit_shader_path, ShaderKind::ClosestHit, include_structure)?;
+) -> Result<(ShaderReflection, PipelineLayout, Vec<DescriptorSetLayout>, Vec<ShaderModule>)> {
+    let raygen_shader = shaders.get(raygen_shader_name).ok_or_else(|| anyhow!("Ray generation shader [ {} ] not found", raygen_shader_name))?;
+    let miss_shader = shaders.get(miss_shader_name).ok_or_else(|| anyhow!("Miss shader [ {} ] not found", miss_shader_name))?;
+    let closest_hit_shader = shaders
+        .get(closest_hit_shader_name)
+        .ok_or_else(|| anyhow!("Closest hit generation shader [ {} ] not found", closest_hit_shader_name))?;
 
     let reflection = ShaderReflection::new(&[raygen_shader.as_binary_u8(), miss_shader.as_binary_u8(), closest_hit_shader.as_binary_u8()])?;
-    let (pipeline_layout, descriptor_set_layouts, _) = shader_compiler::create_pipeline_layout(device, &reflection, bindless_descriptor_set_layout);
+    let (pipeline_layout, descriptor_set_layouts, _) = glsl_shader_compiler::create_pipeline_layout(device, &reflection, bindless_descriptor_set_layout);
 
-    let raygen_shader_module = shader_compiler::create_shader_module(device, raygen_shader.as_binary())?;
-    let miss_shader_module = shader_compiler::create_shader_module(device, miss_shader.as_binary())?;
-    let closest_hit_shader_module = shader_compiler::create_shader_module(device, closest_hit_shader.as_binary())?;
+    let raygen_shader_module = create_shader_module(device, raygen_shader.as_binary())?;
+    let miss_shader_module = create_shader_module(device, miss_shader.as_binary())?;
+    let closest_hit_shader_module = create_shader_module(device, closest_hit_shader.as_binary())?;
 
-    let shader_entry_name = c"main";
+    let shader_modules = vec![raygen_shader_module, miss_shader_module, closest_hit_shader_module];
+
+    Ok((reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
+}
+
+fn create_raytracing_pipeline(device: &WrappedDevice, shader_modules: &[ShaderModule], pipeline_layout: PipelineLayout, pipeline_desc: &PipelineDesc) -> Result<Pipeline> {
+    let raygen_entry_name = CString::new(pipeline_desc.raygen_name.as_ref().unwrap().as_str())?;
+    let miss_entry_name = CString::new(pipeline_desc.miss_name.as_ref().unwrap().as_str())?;
+    let closest_hit_shader_name = CString::new(pipeline_desc.closest_hit_name.as_ref().unwrap().as_str())?;
+
     let shader_stage_create_infos = vec![
         PipelineShaderStageCreateInfo {
-            module: raygen_shader_module,
-            p_name: shader_entry_name.as_ptr(),
+            module: shader_modules[0],
+            p_name: raygen_entry_name.as_ptr(),
             stage: ShaderStageFlags::RAYGEN_KHR,
             ..Default::default()
         },
         PipelineShaderStageCreateInfo {
-            module: miss_shader_module,
-            p_name: shader_entry_name.as_ptr(),
+            module: shader_modules[1],
+            p_name: miss_entry_name.as_ptr(),
             stage: ShaderStageFlags::MISS_KHR,
             ..Default::default()
         },
         PipelineShaderStageCreateInfo {
-            module: closest_hit_shader_module,
-            p_name: shader_entry_name.as_ptr(),
+            module: shader_modules[2],
+            p_name: closest_hit_shader_name.as_ptr(),
             stage: ShaderStageFlags::CLOSEST_HIT_KHR,
             ..Default::default()
         },
     ];
 
-    let shader_modules = vec![raygen_shader_module, miss_shader_module, closest_hit_shader_module];
-
-    Ok((shader_stage_create_infos, reflection, pipeline_layout, descriptor_set_layouts, shader_modules))
-}
-
-fn create_raytracing_pipeline(device: &WrappedDevice, shader_stage_create_infos: Vec<PipelineShaderStageCreateInfo>, pipeline_layout: PipelineLayout) -> Result<Pipeline> {
     let shader_group_create_infos = [
         RayTracingShaderGroupCreateInfoKHR::default()
             .ty(RayTracingShaderGroupTypeKHR::GENERAL)
@@ -594,4 +586,10 @@ fn create_raytracing_sbt(device: &WrappedDevice, buffer_allocator: &RenderBuffer
         closest_hit_region,
         callable_region,
     })
+}
+
+pub fn create_shader_module(device: &WrappedDevice, shader_code: &[u32]) -> Result<ShaderModule> {
+    let shader_info = ShaderModuleCreateInfo::default().code(shader_code);
+
+    Ok(unsafe { device.create_shader_module(&shader_info, None) }?)
 }

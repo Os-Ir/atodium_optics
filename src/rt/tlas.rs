@@ -12,7 +12,7 @@ use ash::vk::{
 };
 use glam::Affine3A;
 use gpu_allocator::MemoryLocation;
-use std::slice;
+use std::{mem, slice};
 
 pub struct Tlas {
     device: WrappedDeviceRef,
@@ -81,7 +81,7 @@ pub fn create_tlas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, 
     let acceleration_instances = create_acceleration_instance(&device, blas, models)?;
 
     let instance_buffer = allocator.allocate(
-        (acceleration_instances.len() * size_of::<AccelerationStructureInstanceKHR>()) as DeviceSize,
+        (acceleration_instances.len() * mem::size_of::<AccelerationStructureInstanceKHR>()) as DeviceSize,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::SHADER_DEVICE_ADDRESS | BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
         MemoryLocation::GpuOnly,
     )?;

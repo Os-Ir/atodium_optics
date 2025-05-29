@@ -1,8 +1,11 @@
 use anyhow::anyhow;
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use bytemuck::Pod;
+use image::hdr::HdrEncoder;
 use image::{ImageBuffer, ImageFormat};
-use std::ffi::{CStr, c_char};
+use std::ffi::{c_char, CStr};
+use std::fs::File;
+use std::mem;
 use std::path::Path;
 
 #[inline]
@@ -31,7 +34,7 @@ pub enum OutputFormat {
 }
 
 pub fn output_image<T: Pod>(path: &impl AsRef<Path>, width: u32, height: u32, pixels: &[T], output_format: OutputFormat) -> Result<()> {
-    if (width * height) as usize * size_of::<[f32; 4]>() != pixels.len() * size_of::<T>() {
+    if (width * height) as usize * mem::size_of::<[f32; 4]>() != pixels.len() * mem::size_of::<T>() {
         bail!("Image dimensions does not match pixels length: {}", pixels.len());
     }
 
@@ -42,10 +45,10 @@ pub fn output_image<T: Pod>(path: &impl AsRef<Path>, width: u32, height: u32, pi
             let image = ImageBuffer::from_fn(width, height, |x, y| {
                 let idx = (y * width + x) as usize;
 
-                let r = (pixels[idx][0] * 255.0) as u8;
-                let g = (pixels[idx][1] * 255.0) as u8;
-                let b = (pixels[idx][2] * 255.0) as u8;
-                let a = (pixels[idx][3] * 255.0) as u8;
+                let r: u8 = (pixels[idx][0] * 255.0) as _;
+                let g: u8 = (pixels[idx][1] * 255.0) as _;
+                let b: u8 = (pixels[idx][2] * 255.0) as _;
+                let a: u8 = (pixels[idx][3] * 255.0) as _;
 
                 image::Rgba([r, g, b, a])
             });
@@ -53,17 +56,10 @@ pub fn output_image<T: Pod>(path: &impl AsRef<Path>, width: u32, height: u32, pi
             image.save_with_format(path, ImageFormat::Png)?;
         }
         OutputFormat::Hdr => {
-            let image = ImageBuffer::from_fn(width, height, |x, y| {
-                let idx = (y * width + x) as usize;
-
-                let r = pixels[idx][0];
-                let g = pixels[idx][1];
-                let b = pixels[idx][2];
-
-                image::Rgb([r, g, b])
-            });
-
-            image.save_with_format(path, ImageFormat::Hdr)?;
+            let pixels = pixels.iter().map(|pixel| image::Rgb([pixel[0], pixel[1], pixel[2]])).collect::<Vec<_>>();
+            let mut file = File::create(path)?;
+            let encoder = HdrEncoder::new(&mut file);
+            encoder.encode(&pixels, width as usize, height as usize)?;
         }
     }
 

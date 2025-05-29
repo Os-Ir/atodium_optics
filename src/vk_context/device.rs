@@ -1,4 +1,5 @@
 use crate::util;
+use crate::vk_context::pipeline::RayTracingSbt;
 use anyhow::{Result, bail};
 use ash::ext::debug_utils;
 use ash::khr::{acceleration_structure, ray_tracing_pipeline};
@@ -6,9 +7,9 @@ use ash::vk;
 use ash::vk::{
     ApplicationInfo, Bool32, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferUsageFlags, CommandPool, CommandPoolCreateFlags, CommandPoolCreateInfo,
     DebugUtilsMessageSeverityFlagsEXT, DebugUtilsMessageTypeFlagsEXT, DebugUtilsMessengerCallbackDataEXT, DebugUtilsMessengerCreateInfoEXT, DebugUtilsMessengerEXT, DeviceCreateInfo,
-    DeviceQueueCreateInfo, FenceCreateInfo, MemoryPropertyFlags, MemoryRequirements, PhysicalDevice, PhysicalDeviceAccelerationStructureFeaturesKHR, PhysicalDeviceFeatures, PhysicalDeviceFeatures2,
-    PhysicalDeviceProperties, PhysicalDeviceRayQueryFeaturesKHR, PhysicalDeviceRayTracingPipelineFeaturesKHR, PhysicalDeviceRayTracingPipelinePropertiesKHR, PhysicalDeviceVulkan12Features,
-    PhysicalDeviceVulkan13Features, QueueFlags, SubmitInfo,
+    DeviceQueueCreateInfo, Extent3D, FenceCreateInfo, MemoryPropertyFlags, MemoryRequirements, PhysicalDevice, PhysicalDeviceAccelerationStructureFeaturesKHR, PhysicalDeviceFeatures,
+    PhysicalDeviceFeatures2, PhysicalDeviceProperties, PhysicalDeviceRayQueryFeaturesKHR, PhysicalDeviceRayTracingPipelineFeaturesKHR, PhysicalDeviceRayTracingPipelinePropertiesKHR,
+    PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, QueueFlags, SubmitInfo,
 };
 use log::{error, info};
 use std::collections::HashSet;
@@ -131,6 +132,21 @@ impl WrappedDevice {
                 rt_pipeline_properties,
                 acceleration_structure_features,
             })
+        }
+    }
+
+    pub fn cmd_trace_rays(&self, cmd_buf: CommandBuffer, sbt: &RayTracingSbt, extent: Extent3D) {
+        unsafe {
+            self.rt_pipeline_device.cmd_trace_rays(
+                cmd_buf,
+                &sbt.raygen_region,
+                &sbt.miss_region,
+                &sbt.closest_hit_region,
+                &sbt.callable_region,
+                extent.width,
+                extent.height,
+                extent.depth,
+            );
         }
     }
 
@@ -423,6 +439,7 @@ unsafe fn create_device(instance: &ash::Instance, physical_device: PhysicalDevic
         let mut acceleration_structure_features = PhysicalDeviceAccelerationStructureFeaturesKHR::default().acceleration_structure(true);
 
         let mut vulkan_12_features = PhysicalDeviceVulkan12Features::default()
+            .vulkan_memory_model(true)
             .descriptor_indexing(true)
             .runtime_descriptor_array(true)
             .buffer_device_address(true);

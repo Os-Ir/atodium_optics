@@ -19,7 +19,5 @@ void main() {
 
     uint linear_idx = resolution.x * pixel.y + pixel.x;
 
-    storage_image.data[3 * linear_idx + 0] = pixel_color.r;
-    storage_image.data[3 * linear_idx + 1] = pixel_color.g;
-    storage_image.data[3 * linear_idx + 2] = pixel_color.b;
+    storage_image.data[linear_idx] = vec4(pixel_color, 1.0);
 }

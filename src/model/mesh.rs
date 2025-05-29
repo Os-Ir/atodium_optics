@@ -4,6 +4,7 @@ use anyhow::Result;
 use ash::vk::{BufferUsageFlags, DeviceSize};
 use glam::Vec4;
 use gpu_allocator::MemoryLocation;
+use std::mem;
 
 pub struct MeshBuffer {
     pub indices: Vec<u32>,
@@ -15,7 +16,7 @@ pub struct MeshBuffer {
 impl MeshBuffer {
     pub fn new(allocator: &RenderBufferAllocator, indices: Vec<u32>, vertices: Vec<Vertex>) -> Result<Self> {
         let index_buffer = allocator.allocate(
-            (indices.len() * size_of::<u32>()) as DeviceSize,
+            (indices.len() * mem::size_of::<u32>()) as DeviceSize,
             BufferUsageFlags::STORAGE_BUFFER
                 | BufferUsageFlags::TRANSFER_DST
                 | BufferUsageFlags::INDEX_BUFFER
@@ -27,7 +28,7 @@ impl MeshBuffer {
         allocator.upload_data::<u32>(&index_buffer, &indices)?;
 
         let vertex_buffer = allocator.allocate(
-            (vertices.len() * size_of::<Vertex>()) as DeviceSize,
+            (vertices.len() * mem::size_of::<Vertex>()) as DeviceSize,
             BufferUsageFlags::STORAGE_BUFFER
                 | BufferUsageFlags::TRANSFER_DST
                 | BufferUsageFlags::VERTEX_BUFFER
