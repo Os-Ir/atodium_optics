@@ -146,7 +146,7 @@ pub fn test_cornell() -> Result<()> {
 
     let pixels: Vec<[f32; 4]> = allocator.download_data(&buffer)?;
 
-    util::output_image(&util::lib_root().join("output").join("cornell.hdr"), render_width, render_height, &pixels, OutputFormat::Hdr)?;
+    util::output_image(&util::lib_root().join("output").join("cornell.png"), render_width, render_height, &pixels, OutputFormat::Png)?;
 
     Ok(())
 }

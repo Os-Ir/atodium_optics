@@ -1,3 +1,4 @@
+use crate::BasicVecOperation;
 use spirv_std::glam::{UVec2, UVec3, Vec2, Vec3, Vec3Swizzles, Vec4, Vec4Swizzles};
 use spirv_std::num_traits::Float;
 use spirv_std::ray_tracing::{AccelerationStructure, RayFlags};
@@ -54,7 +55,7 @@ fn get_hit_result(primitive_id: usize, vertices: &[Vec4], indices: &[u32], hit_u
 
     HitResult {
         position: v0 * barycentrics.x + v1 * barycentrics.y + v2 * barycentrics.z,
-        normal: if normal.dot(ray_direction) < 0.0 { normal } else { -normal },
+        normal: normal.faceforward(&ray_direction),
         color: Vec3::new(0.7, 0.7, 0.7),
     }
 }
@@ -82,11 +83,11 @@ pub fn main_rgen(
     let t_min: f32 = 0.0;
     let t_max: f32 = 10000.0;
 
-    let mut rand_state = resolution.x * pixel.y + pixel.x;
+    payload.rand_state = resolution.x * pixel.y + pixel.x;
     let mut integrated_color = Vec3::ZERO;
 
     for _ in 0..sample_level {
-        let pixel_center: Vec2 = pixel.as_vec2() + Vec2::new(gen_rand(&mut rand_state), gen_rand(&mut rand_state));
+        let pixel_center: Vec2 = pixel.as_vec2() + Vec2::new(gen_rand(&mut payload.rand_state), gen_rand(&mut payload.rand_state));
         let screen_uv: Vec2 = Vec2::new(
             (2.0 * pixel_center.x - resolution.x as f32) / resolution.y as f32,
             -(2.0 * pixel_center.y - resolution.y as f32) / resolution.y as f32,
