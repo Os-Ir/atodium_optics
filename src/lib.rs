@@ -1,9 +1,9 @@
-use crate::render_resource::render_image::ImageDesc;
+use crate::memory::render_image::ImageDesc;
 use crate::rt::{blas, tlas};
 use crate::util::OutputFormat;
-use crate::vk_context::descriptor_set::{DescriptorId, WrappedDescriptorSet};
-use crate::vk_context::pipeline::{PipelineDesc, WrappedPipeline};
-use crate::vk_context::shader_builder;
+use crate::render::descriptor_set::{DescriptorId, WrappedDescriptorSet};
+use crate::render::pipeline::{PipelineDesc, WrappedPipeline};
+use crate::render::shader_builder;
 use anyhow::Result;
 use ash::vk;
 use ash::vk::{AccessFlags, BufferUsageFlags, DependencyFlags, DeviceSize, Format, ImageLayout, ImageTiling, ImageUsageFlags, MemoryBarrier, MemoryPropertyFlags, PipelineStageFlags};
@@ -15,13 +15,13 @@ use std::fs::File;
 use std::{mem, slice};
 
 pub mod model;
-pub mod render_resource;
+pub mod memory;
 pub mod rt;
 pub mod util;
-pub mod vk_context;
+pub mod render;
 
 pub fn test_hello_world() -> Result<()> {
-    let (device, buffer_allocator, _, _) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
+    let (device, buffer_allocator, _, _) = render::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
 
     let shaders = shader_builder::compile_spirv_shaders();
 
@@ -61,7 +61,7 @@ pub fn test_hello_world() -> Result<()> {
 }
 
 pub fn test_cornell() -> Result<()> {
-    let (device, allocator, image_allocator, _) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
+    let (device, allocator, image_allocator, _) = render::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
 
     let shaders = shader_builder::compile_spirv_shaders();
 
@@ -152,7 +152,7 @@ pub fn test_cornell() -> Result<()> {
 }
 
 pub fn test_rt_pipeline() -> Result<()> {
-    let (device, allocator, image_allocator, _) = vk_context::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
+    let (device, allocator, image_allocator, _) = render::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
 
     let shaders = shader_builder::compile_spirv_shaders();
 

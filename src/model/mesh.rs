@@ -1,5 +1,5 @@
+use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocator};
 use crate::model::vertex::Vertex;
-use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
 use anyhow::Result;
 use ash::vk::{BufferUsageFlags, DeviceSize};
 use glam::Vec4;
@@ -48,7 +48,7 @@ impl MeshBuffer {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum MaterialType {
     Lambertian,
     Metal,

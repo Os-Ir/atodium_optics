@@ -1,9 +1,9 @@
-use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
-use crate::vk_context;
-use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
-use crate::vk_context::glsl_shader_compiler;
-use crate::vk_context::shader_builder::SpirvShaders;
-use crate::vk_context::shader_reflection::ShaderReflection;
+use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocator};
+use crate::render;
+use crate::render::device::{WrappedDevice, WrappedDeviceRef};
+use crate::render::glsl_shader_compiler;
+use crate::render::shader_builder::SpirvShaders;
+use crate::render::shader_reflection::ShaderReflection;
 use anyhow::{anyhow, bail, Result};
 use ash::vk;
 use ash::vk::{
@@ -526,11 +526,11 @@ fn create_raytracing_sbt(device: &WrappedDevice, buffer_allocator: &RenderBuffer
     let handle_alignment = device.rt_pipeline_properties.shader_group_handle_alignment as DeviceSize;
     let base_alignment = device.rt_pipeline_properties.shader_group_base_alignment as DeviceSize;
 
-    let handle_size_aligned = vk_context::align_up(handle_size, handle_alignment);
+    let handle_size_aligned = render::align_up(handle_size, handle_alignment);
 
-    let raygen_size = vk_context::align_up(handle_size_aligned, base_alignment);
-    let miss_size = vk_context::align_up(handle_size_aligned, base_alignment);
-    let closest_hit_size = vk_context::align_up((closest_hit_count as DeviceSize) * handle_size_aligned, base_alignment);
+    let raygen_size = render::align_up(handle_size_aligned, base_alignment);
+    let miss_size = render::align_up(handle_size_aligned, base_alignment);
+    let closest_hit_size = render::align_up((closest_hit_count as DeviceSize) * handle_size_aligned, base_alignment);
 
     let handle_count = 2 + closest_hit_count;
     let sbt_buffer_size = raygen_size + miss_size + closest_hit_size;

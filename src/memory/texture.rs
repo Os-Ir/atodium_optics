@@ -1,5 +1,5 @@
-use crate::render_resource::render_image::{ImageAllocator, RenderImage};
-use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
+use crate::memory::render_image::{ImageAllocator, RenderImage};
+use crate::render::device::{WrappedDevice, WrappedDeviceRef};
 use anyhow::Result;
 use ash::prelude::VkResult;
 use ash::vk::{BorderColor, CompareOp, DescriptorImageInfo, Filter, ImageLayout, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode};

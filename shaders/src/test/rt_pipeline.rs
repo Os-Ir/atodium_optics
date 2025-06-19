@@ -1,4 +1,4 @@
-use crate::BasicVecOperation;
+use crate::util::vector::BasicVecOperation;
 use spirv_std::glam::{UVec2, UVec3, Vec2, Vec3, Vec3Swizzles, Vec4, Vec4Swizzles};
 use spirv_std::num_traits::Float;
 use spirv_std::ray_tracing::{AccelerationStructure, RayFlags};
@@ -55,7 +55,7 @@ fn get_hit_result(primitive_id: usize, vertices: &[Vec4], indices: &[u32], hit_u
 
     HitResult {
         position: v0 * barycentrics.x + v1 * barycentrics.y + v2 * barycentrics.z,
-        normal: normal.faceforward(&ray_direction),
+        normal: normal.faceforward(ray_direction),
         color: Vec3::new(0.7, 0.7, 0.7),
     }
 }

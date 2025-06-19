@@ -1,5 +1,5 @@
-use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocatorRef};
-use crate::vk_context::device::WrappedDeviceRef;
+use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocatorRef};
+use crate::render::device::WrappedDeviceRef;
 use anyhow::{anyhow, bail, Result};
 use ash::vk::{
     AccessFlags, BufferImageCopy, BufferUsageFlags, DependencyFlags, DeviceMemory, DeviceSize, Extent3D, Format, Image, ImageAspectFlags, ImageCopy, ImageCreateInfo, ImageLayout, ImageMemoryBarrier,

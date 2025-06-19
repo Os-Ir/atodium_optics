@@ -1,4 +1,4 @@
-use crate::vk_context::device::WrappedDevice;
+use crate::render::device::WrappedDevice;
 use anyhow::Result;
 use ash::vk::{
     DescriptorBindingFlags, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,

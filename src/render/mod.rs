@@ -1,7 +1,7 @@
-use crate::render_resource::render_buffer::{RenderBufferAllocator, RenderBufferAllocatorRef};
-use crate::render_resource::render_image::{ImageAllocator, ImageAllocatorRef};
-use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
-use crate::vk_context::glsl_shader_compiler::ShaderIncludeStructure;
+use crate::memory::render_buffer::{RenderBufferAllocator, RenderBufferAllocatorRef};
+use crate::memory::render_image::{ImageAllocator, ImageAllocatorRef};
+use crate::render::device::{WrappedDevice, WrappedDeviceRef};
+use crate::render::glsl_shader_compiler::ShaderIncludeStructure;
 use anyhow::Result;
 use ash::vk;
 use ash::vk::DeviceSize;

@@ -1,9 +1,9 @@
 use crate::model::mesh::{MaterialType, MeshBuffer, RenderMaterial, RenderMesh};
 use crate::model::vertex::Vertex;
-use crate::render_resource::render_buffer::RenderBufferAllocator;
-use crate::render_resource::render_image::ImageAllocator;
-use crate::render_resource::texture::Texture;
-use crate::vk_context::device::WrappedDeviceRef;
+use crate::memory::render_buffer::RenderBufferAllocator;
+use crate::memory::render_image::ImageAllocator;
+use crate::memory::texture::Texture;
+use crate::render::device::WrappedDeviceRef;
 use anyhow::{Result, anyhow, bail};
 use glam::{Mat4, Vec2, Vec3, Vec4};
 use gltf::Node as GltfNode;

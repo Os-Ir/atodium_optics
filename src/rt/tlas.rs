@@ -1,8 +1,8 @@
 use crate::model::RenderModel;
-use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
+use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocator};
 use crate::rt;
 use crate::rt::blas::Blas;
-use crate::vk_context::device::{WrappedDevice, WrappedDeviceRef};
+use crate::render::device::{WrappedDevice, WrappedDeviceRef};
 use anyhow::Result;
 use ash::vk::{
     AccelerationStructureBuildGeometryInfoKHR, AccelerationStructureBuildRangeInfoKHR, AccelerationStructureBuildSizesInfoKHR, AccelerationStructureBuildTypeKHR,

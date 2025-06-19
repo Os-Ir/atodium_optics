@@ -1,4 +1,4 @@
-use crate::vk_context::device::WrappedDeviceRef;
+use crate::render::device::WrappedDeviceRef;
 use anyhow::{anyhow, bail, Result};
 use ash::vk::{Buffer, BufferCopy, BufferCreateInfo, BufferDeviceAddressInfo, BufferUsageFlags, CommandBuffer, DeviceAddress, DeviceSize, IndexType, SharingMode};
 use core::slice;

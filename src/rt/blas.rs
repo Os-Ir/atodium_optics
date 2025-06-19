@@ -1,8 +1,8 @@
 use crate::model::mesh::MeshBuffer;
 use crate::model::vertex::Vertex;
-use crate::render_resource::render_buffer::{RenderBuffer, RenderBufferAllocator};
+use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocator};
 use crate::rt;
-use crate::vk_context::device::WrappedDeviceRef;
+use crate::render::device::WrappedDeviceRef;
 use anyhow::{Result, anyhow};
 use ash::vk::{
     AccelerationStructureBuildGeometryInfoKHR, AccelerationStructureBuildRangeInfoKHR, AccelerationStructureBuildSizesInfoKHR, AccelerationStructureBuildTypeKHR, AccelerationStructureGeometryDataKHR,

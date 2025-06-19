@@ -1,6 +1,6 @@
-use crate::vk_context::descriptor_set;
-use crate::vk_context::device::WrappedDevice;
-use crate::vk_context::shader_reflection::ShaderReflection;
+use crate::render::descriptor_set;
+use crate::render::device::WrappedDevice;
+use crate::render::shader_reflection::ShaderReflection;
 use anyhow::{anyhow, Result};
 use ash::vk::{DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PushConstantRange, ShaderStageFlags};
 use lazy_static::lazy_static;
@@ -28,7 +28,7 @@ impl ShaderIncludeStructure {
 
 #[inline]
 pub fn glsl_shader_base_dir() -> PathBuf {
-    crate::util::lib_root().join("glsl")
+    crate::util::lib_root().join("shaders/glsl")
 }
 
 #[inline]

@@ -1,4 +1,4 @@
-use crate::BasicVecOperation;
+use crate::util::vector::BasicVecOperation;
 use spirv_std::glam::{UVec2, UVec3, Vec2, Vec3, Vec3Swizzles, Vec4, Vec4Swizzles};
 use spirv_std::ray_tracing::{AccelerationStructure, CommittedIntersection, RayFlags, RayQuery};
 use spirv_std::spirv;
@@ -47,7 +47,7 @@ unsafe fn get_hit_result(vertices: &[Vec4], indices: &[u32], ray_query: &RayQuer
 
     HitResult {
         position: v0 * barycentrics.x + v1 * barycentrics.y + v2 * barycentrics.z,
-        normal: normal.faceforward(&ray_direction),
+        normal: normal.faceforward(ray_direction),
         color: Vec3::new(0.7, 0.7, 0.7),
     }
 }
@@ -106,7 +106,7 @@ pub fn main_cs(
                     current_ray_color *= hit_result.color;
 
                     ray_origin = hit_result.position + 0.0001 * hit_result.normal;
-                    ray_direction = ray_direction.reflect(&hit_result.normal);
+                    ray_direction = ray_direction.reflect(hit_result.normal);
                 } else {
                     current_ray_color *= sky_color(ray_direction);
                     integrated_color += current_ray_color;

@@ -1,9 +1,9 @@
-use crate::render_resource::render_buffer::RenderBuffer;
-use crate::render_resource::render_image::RenderImage;
+use crate::memory::render_buffer::RenderBuffer;
+use crate::memory::render_image::RenderImage;
 use crate::rt::tlas::Tlas;
-use crate::vk_context::device::WrappedDeviceRef;
-use crate::vk_context::pipeline::WrappedPipeline;
-use crate::vk_context::shader_reflection::BindingMap;
+use crate::render::device::WrappedDeviceRef;
+use crate::render::pipeline::WrappedPipeline;
+use crate::render::shader_reflection::BindingMap;
 use anyhow::{anyhow, Result};
 use ash::vk::{
     CommandBuffer, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
