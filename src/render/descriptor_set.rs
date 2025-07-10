@@ -1,9 +1,9 @@
 use crate::memory::render_buffer::RenderBuffer;
 use crate::memory::render_image::RenderImage;
-use crate::rt::tlas::Tlas;
 use crate::render::device::WrappedDeviceRef;
 use crate::render::pipeline::WrappedPipeline;
 use crate::render::shader_reflection::BindingMap;
+use crate::rt::tlas::Tlas;
 use anyhow::{anyhow, Result};
 use ash::vk::{
     CommandBuffer, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
@@ -77,14 +77,12 @@ impl WrappedDescriptorSet {
 
         let descriptor_pool_sizes: Vec<DescriptorPoolSize> = descriptor_pool_sizes.iter().map(|(&ty, &count)| DescriptorPoolSize::default().ty(ty).descriptor_count(count)).collect();
 
-        let descriptor_pool = {
-            let descriptor_pool_info = DescriptorPoolCreateInfo::default()
-                .pool_sizes(&descriptor_pool_sizes)
-                .flags(DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET | DescriptorPoolCreateFlags::UPDATE_AFTER_BIND)
-                .max_sets(descriptor_pool_sizes.len() as u32);
+        let descriptor_pool_info = DescriptorPoolCreateInfo::default()
+            .pool_sizes(&descriptor_pool_sizes)
+            .flags(DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET | DescriptorPoolCreateFlags::UPDATE_AFTER_BIND)
+            .max_sets(descriptor_pool_sizes.len() as u32);
 
-            unsafe { device.create_descriptor_pool(&descriptor_pool_info, None)? }
-        };
+        let descriptor_pool = unsafe { device.create_descriptor_pool(&descriptor_pool_info, None)? };
 
         let descriptor_allocate_info = DescriptorSetAllocateInfo::default().descriptor_pool(descriptor_pool).set_layouts(slice::from_ref(&layout));
 

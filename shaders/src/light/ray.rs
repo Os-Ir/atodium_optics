@@ -1,4 +1,4 @@
-use crate::camera::medium::Medium;
+use crate::light::medium::Medium;
 use crate::util;
 use core::ops::Deref;
 use spirv_std::glam::{Mat4, Vec3};
@@ -95,10 +95,16 @@ impl RayDifferential {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Vec3i {
     pub point: Vec3,
     pub error: Vec3,
+}
+
+impl From<Vec3> for Vec3i {
+    fn from(point: Vec3) -> Self {
+        Self { point, error: Vec3::ZERO }
+    }
 }
 
 #[inline]

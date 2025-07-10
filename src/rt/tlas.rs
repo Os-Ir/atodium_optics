@@ -1,8 +1,8 @@
-use crate::model::RenderModel;
 use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocator};
+use crate::model::RenderModel;
+use crate::render::device::{WrappedDevice, WrappedDeviceRef};
 use crate::rt;
 use crate::rt::blas::Blas;
-use crate::render::device::{WrappedDevice, WrappedDeviceRef};
 use anyhow::Result;
 use ash::vk::{
     AccelerationStructureBuildGeometryInfoKHR, AccelerationStructureBuildRangeInfoKHR, AccelerationStructureBuildSizesInfoKHR, AccelerationStructureBuildTypeKHR,
@@ -10,9 +10,16 @@ use ash::vk::{
     AccelerationStructureKHR, AccelerationStructureReferenceKHR, AccelerationStructureTypeKHR, BufferUsageFlags, BuildAccelerationStructureFlagsKHR, BuildAccelerationStructureModeKHR,
     DeviceOrHostAddressConstKHR, DeviceOrHostAddressKHR, DeviceSize, GeometryFlagsKHR, GeometryInstanceFlagsKHR, GeometryTypeKHR, Packed24_8, TransformMatrixKHR,
 };
-use glam::Affine3A;
+use glam::{Affine3A, Mat4};
 use gpu_allocator::MemoryLocation;
 use std::{mem, slice};
+
+#[derive(Default, Clone, Copy)]
+#[repr(C)]
+pub struct InstanceMetadata {
+    pub transform: Mat4,
+    pub index_offset: u32,
+}
 
 pub struct Tlas {
     device: WrappedDeviceRef,
@@ -64,7 +71,7 @@ pub fn create_acceleration_instance(device: &WrappedDevice, blas: &[Blas], model
             let as_instance = AccelerationStructureInstanceKHR {
                 transform,
                 acceleration_structure_reference: acceleration_reference,
-                instance_custom_index_and_mask: Packed24_8::new(0, 0xff),
+                instance_custom_index_and_mask: Packed24_8::new(blas[blas_idx].custom_index, 0xff),
                 instance_shader_binding_table_record_offset_and_flags: Packed24_8::new(0, GeometryInstanceFlagsKHR::TRIANGLE_FACING_CULL_DISABLE.as_raw() as u8),
             };
 

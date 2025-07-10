@@ -22,10 +22,7 @@ pub fn allocate_acceleration_structure(
         MemoryLocation::GpuOnly,
     )?;
 
-    let create_info = AccelerationStructureCreateInfoKHR::default()
-        .ty(ty)
-        .buffer(buffer.buffer)
-        .size(build_sizes.acceleration_structure_size);
+    let create_info = AccelerationStructureCreateInfoKHR::default().ty(ty).buffer(buffer.buffer).size(build_sizes.acceleration_structure_size);
 
     let acceleration_structure = unsafe { device.acceleration_device.create_acceleration_structure(&create_info, None)? };
 

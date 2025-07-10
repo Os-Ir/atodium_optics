@@ -51,9 +51,8 @@ impl MeshBuffer {
 #[derive(Copy, Clone, Debug)]
 pub enum MaterialType {
     Lambertian,
-    Metal,
+    Conductor,
     Dielectric,
-    DiffuseLight,
 }
 
 impl Default for MaterialType {
@@ -62,18 +61,29 @@ impl Default for MaterialType {
     }
 }
 
+impl Into<u32> for MaterialType {
+    fn into(self) -> u32 {
+        match self {
+            MaterialType::Lambertian => 0,
+            MaterialType::Conductor => 1,
+            MaterialType::Dielectric => 2,
+        }
+    }
+}
+
 #[derive(Default, Copy, Clone)]
+#[repr(C)]
 pub struct RenderMaterial {
+    pub base_color: Vec4,
+    pub metallic_factor: f32,
+    pub roughness_factor: f32,
+
     pub diffuse_map: u32,
     pub normal_map: u32,
     pub metallic_roughness_map: u32,
     pub occlusion_map: u32,
 
-    pub base_color: Vec4,
-    pub metallic_factor: f32,
-    pub roughness_factor: f32,
-
-    pub material_type: MaterialType,
+    pub material_type: u32,
     pub material_property: f32,
 }
 

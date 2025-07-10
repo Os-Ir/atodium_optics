@@ -1,5 +1,6 @@
-use crate::camera::ray::Ray;
+use crate::light::ray::Ray;
 use crate::spectrum::{SampledSpectrum, SampledWavelengths};
+use core::ops::Deref;
 use spirv_std::glam::{Vec2, Vec3};
 
 #[repr(C)]
@@ -19,7 +20,17 @@ pub trait IPhaseFunction {
 }
 
 #[derive(Clone, Copy)]
-pub enum PhaseFunction {}
+pub enum PhaseFunction {
+    Hg,
+}
+
+impl Deref for PhaseFunction {
+    type Target = dyn IPhaseFunction;
+
+    fn deref(&self) -> &Self::Target {
+        todo!()
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -54,4 +65,35 @@ pub trait IMedium {
 }
 
 #[derive(Clone, Copy)]
-pub enum Medium {}
+pub enum Medium {
+    Homogeneous,
+    Grid,
+    RgbGrid,
+    Cloud,
+    NanoVdb,
+}
+
+impl Deref for Medium {
+    type Target = dyn IMedium;
+
+    fn deref(&self) -> &Self::Target {
+        todo!()
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+#[repr(C)]
+pub struct MediumInterface {
+    pub inside: Option<Medium>,
+    pub outside: Option<Medium>,
+}
+
+impl MediumInterface {
+    pub fn new(inside: Option<Medium>, outside: Option<Medium>) -> Self {
+        Self { inside, outside }
+    }
+
+    pub fn is_medium_transition(&self) -> bool {
+        todo!()
+    }
+}

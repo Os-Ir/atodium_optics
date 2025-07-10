@@ -7,13 +7,13 @@ use ash::vk;
 use ash::vk::DeviceSize;
 use std::ffi::CStr;
 
+pub mod bindless_descriptor;
 pub mod descriptor_set;
 pub mod device;
-pub mod pipeline;
 pub mod glsl_shader_compiler;
-pub mod shader_reflection;
-pub mod bindless_descriptor;
+pub mod pipeline;
 pub mod shader_builder;
+pub mod shader_reflection;
 
 pub const ENGINE_NAME: &str = "atodium_optics";
 pub const ENGINE_VERSION: u32 = vk::make_api_version(0, 1, 1, 1);

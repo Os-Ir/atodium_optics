@@ -5,7 +5,6 @@ fn setup_logger() {
     env_logger::init();
 }
 
-
 fn main() {
     setup_logger();
 

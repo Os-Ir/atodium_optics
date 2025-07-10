@@ -1,14 +1,19 @@
-use crate::model::mesh::{MaterialType, MeshBuffer, RenderMaterial, RenderMesh};
-use crate::model::vertex::Vertex;
-use crate::memory::render_buffer::RenderBufferAllocator;
+use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocator};
 use crate::memory::render_image::ImageAllocator;
 use crate::memory::texture::Texture;
+use crate::model::mesh::{MaterialType, MeshBuffer, RenderMaterial, RenderMesh};
+use crate::model::vertex::Vertex;
 use crate::render::device::WrappedDeviceRef;
-use anyhow::{Result, anyhow, bail};
+use crate::rt::blas;
+use crate::rt::blas::Blas;
+use crate::rt::tlas::InstanceMetadata;
+use anyhow::{anyhow, bail, Result};
+use ash::vk::BufferUsageFlags;
 use glam::{Mat4, Vec2, Vec3, Vec4};
-use gltf::Node as GltfNode;
 use gltf::buffer::Data as GltfBufferData;
 use gltf::image::Format as GltfFormat;
+use gltf::Node as GltfNode;
+use gpu_allocator::MemoryLocation;
 use image::{DynamicImage, RgbImage};
 use log::{error, info};
 use std::mem;
@@ -30,6 +35,92 @@ impl RenderModel {
     pub fn merge(&mut self, other: RenderModel) {
         self.meshes.extend(other.meshes);
         self.textures.extend(other.textures);
+    }
+
+    pub fn write_vertices_to_buffer(&self, allocator: &RenderBufferAllocator) -> Result<RenderBuffer> {
+        let vertices = self.meshes.iter().map(|(mesh, _)| mesh.mesh_buffer.vertices.clone()).flatten().collect::<Vec<_>>();
+
+        let vertices_buffer = allocator.allocate(
+            (vertices.len() * mem::size_of::<Vertex>()) as _,
+            BufferUsageFlags::STORAGE_BUFFER | BufferUsageFlags::TRANSFER_DST,
+            MemoryLocation::GpuOnly,
+        )?;
+
+        allocator.upload_data(&vertices_buffer, &vertices)?;
+
+        Ok(vertices_buffer)
+    }
+
+    pub fn write_indices_to_buffer(&self, allocator: &RenderBufferAllocator) -> Result<RenderBuffer> {
+        let mut current_index = 0_u32;
+        let mut indices = Vec::new();
+
+        for (mesh, _) in &self.meshes {
+            indices.append(&mut mesh.mesh_buffer.indices.iter().map(|&idx| idx + current_index).collect::<Vec<u32>>());
+            current_index += mesh.mesh_buffer.vertices.len() as u32;
+        }
+
+        let indices_buffer = allocator.allocate(
+            (indices.len() * mem::size_of::<u32>()) as _,
+            BufferUsageFlags::STORAGE_BUFFER | BufferUsageFlags::TRANSFER_DST,
+            MemoryLocation::GpuOnly,
+        )?;
+
+        allocator.upload_data(&indices_buffer, &indices)?;
+
+        Ok(indices_buffer)
+    }
+
+    pub fn write_instance_metadata_to_buffer(&self, allocator: &RenderBufferAllocator) -> Result<RenderBuffer> {
+        let mut current_index = 0_u32;
+        let mut metadata = Vec::new();
+
+        for (mesh, transform) in &self.meshes {
+            metadata.push(InstanceMetadata {
+                transform: *transform,
+                index_offset: current_index,
+            });
+
+            current_index += mesh.mesh_buffer.indices.len() as u32;
+        }
+
+        let metadata_buffer = allocator.allocate(
+            (metadata.len() * mem::size_of::<InstanceMetadata>()) as _,
+            BufferUsageFlags::STORAGE_BUFFER | BufferUsageFlags::TRANSFER_DST,
+            MemoryLocation::GpuOnly,
+        )?;
+
+        allocator.upload_data(&metadata_buffer, &metadata)?;
+
+        Ok(metadata_buffer)
+    }
+
+    pub fn write_material_to_buffer(&self, allocator: &RenderBufferAllocator) -> Result<RenderBuffer> {
+        let materials = self.meshes.iter().map(|(mesh, _)| mesh.material).collect::<Vec<_>>();
+
+        let material_buffer = allocator.allocate(
+            (materials.len() * mem::size_of::<RenderMaterial>()) as _,
+            BufferUsageFlags::STORAGE_BUFFER | BufferUsageFlags::TRANSFER_DST,
+            MemoryLocation::GpuOnly,
+        )?;
+
+        allocator.upload_data(&material_buffer, &materials)?;
+
+        Ok(material_buffer)
+    }
+
+    pub fn build_blas(&self, device: WrappedDeviceRef, allocator: &RenderBufferAllocator) -> Vec<Blas> {
+        self.meshes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (mesh, _))| match blas::create_blas(device.clone(), &allocator, &mesh.mesh_buffer, i as _) {
+                Ok(blas) => Some(blas),
+                Err(error) => {
+                    error!("Failed to build bottom level acceleration structure: {:?}", error);
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
     }
 }
 
@@ -81,6 +172,7 @@ pub fn load_gltf_node(buffer_allocator: &RenderBufferAllocator, node: &GltfNode,
             match MeshBuffer::new(buffer_allocator, indices, vertices) {
                 Ok(mesh_buffer) => {
                     let material = primitive.material();
+
                     let pbr = material.pbr_metallic_roughness();
 
                     let diffuse_index = pbr.base_color_texture().map_or(u32::MAX, |texture| texture.texture().index() as u32);
@@ -93,14 +185,14 @@ pub fn load_gltf_node(buffer_allocator: &RenderBufferAllocator, node: &GltfNode,
                     let roughness_factor = pbr.roughness_factor();
 
                     let render_material = RenderMaterial {
+                        base_color: Vec4::from(base_color_factor),
                         diffuse_map: diffuse_index,
                         normal_map: normal_index,
                         metallic_roughness_map: metallic_roughness_index,
                         occlusion_map: occlusion_index,
-                        base_color: Vec4::from(base_color_factor),
                         metallic_factor,
                         roughness_factor,
-                        material_type: MaterialType::Lambertian,
+                        material_type: MaterialType::default().into(),
                         material_property: 0.0,
                     };
 

@@ -1,6 +1,6 @@
 use crate::camera::film::Film;
-use crate::camera::medium::Medium;
-use crate::camera::ray::{Ray, RayDifferential};
+use crate::light::medium::Medium;
+use crate::light::ray::{Ray, RayDifferential};
 use crate::spectrum::{SampledSpectrum, SampledWavelengths};
 use crate::util::frame::Frame;
 use crate::util::{math, sampling};
@@ -9,8 +9,6 @@ use spirv_std::glam::{Mat4, Quat, Vec2, Vec3};
 
 pub mod film;
 pub mod filter;
-pub mod medium;
-pub mod ray;
 pub mod transform;
 
 #[derive(Clone, Copy)]

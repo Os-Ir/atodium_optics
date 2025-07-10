@@ -5,7 +5,7 @@ use crate::util::{math, sampling};
 use core::array;
 use core::f32::consts;
 use num_complex::Complex32;
-use num_traits::Float;
+use spirv_std::num_traits::Float;
 use spirv_std::glam::{Vec2, Vec3};
 
 #[inline]
@@ -18,13 +18,13 @@ pub fn refract(input_direction: Vec3, mut normal: Vec3, mut eta: f32) -> Option<
         normal = -normal;
     }
 
-    let sin_theta_i_sqr = Float::max(1.0 - cos_theta_i * cos_theta_i, 0.0);
+    let sin_theta_i_sqr = (1.0 - cos_theta_i * cos_theta_i).max(0.0);
     let sin_theta_t_sqr = sin_theta_i_sqr / (eta * eta);
 
     if sin_theta_t_sqr >= 1.0 {
         None
     } else {
-        let cos_theta_t = Float::sqrt(1.0 - sin_theta_t_sqr);
+        let cos_theta_t = (1.0 - sin_theta_t_sqr).sqrt();
 
         Some((eta, -input_direction / eta + (cos_theta_i / eta - cos_theta_t) * normal))
     }
@@ -32,7 +32,7 @@ pub fn refract(input_direction: Vec3, mut normal: Vec3, mut eta: f32) -> Option<
 
 #[inline]
 pub fn fresnel_real(mut cos_theta_i: f32, mut eta: f32) -> f32 {
-    cos_theta_i = Float::clamp(cos_theta_i, -1.0, 1.0);
+    cos_theta_i = cos_theta_i.clamp(-1.0, 1.0);
 
     if cos_theta_i < 0.0 {
         eta = 1.0 / eta;
@@ -45,7 +45,7 @@ pub fn fresnel_real(mut cos_theta_i: f32, mut eta: f32) -> f32 {
     if sin_theta_t_sqr >= 1.0 {
         1.0
     } else {
-        let cos_theta_t = Float::sqrt(1.0 - sin_theta_t_sqr);
+        let cos_theta_t = (1.0 - sin_theta_t_sqr).sqrt();
 
         let r_parallel = (eta * cos_theta_i - cos_theta_t) / (eta * cos_theta_i + cos_theta_t);
         let r_perpendicular = (cos_theta_i - eta * cos_theta_t) / (cos_theta_i + eta * cos_theta_t);
@@ -56,7 +56,7 @@ pub fn fresnel_real(mut cos_theta_i: f32, mut eta: f32) -> f32 {
 
 #[inline]
 pub fn fresnel_complex(mut cos_theta_i: f32, eta: Complex32) -> f32 {
-    cos_theta_i = Float::clamp(cos_theta_i, 0.0, 1.0);
+    cos_theta_i = cos_theta_i.clamp(0.0, 1.0);
 
     let sin_theta_i_sqr = 1.0 - cos_theta_i * cos_theta_i;
     let sin_theta_t_sqr: Complex32 = (sin_theta_i_sqr / (eta * eta)).into();
@@ -90,8 +90,8 @@ pub struct TrowbridgeReitzDistribution {
 impl TrowbridgeReitzDistribution {
     pub fn new(alpha_x: f32, alpha_y: f32) -> Self {
         Self {
-            alpha_x: Float::max(alpha_x, 1.0e-4),
-            alpha_y: Float::max(alpha_y, 1.0e-4),
+            alpha_x: alpha_x.max(1.0e-4),
+            alpha_y: alpha_y.max(1.0e-4),
         }
     }
 
@@ -113,7 +113,7 @@ impl TrowbridgeReitzDistribution {
     }
 
     pub fn effectively_smooth(&self) -> bool {
-        Float::max(self.alpha_x, self.alpha_y) < 1.0e-3
+        self.alpha_x.max(self.alpha_y) < 1.0e-3
     }
 
     fn mask_lambda(&self, direction: Vec3) -> f32 {
@@ -121,7 +121,7 @@ impl TrowbridgeReitzDistribution {
 
         if tan_theta_sqr.is_finite() {
             let alpha_sqr = math::sqr(direction.cos_phi() * self.alpha_x) + math::sqr(direction.sin_phi() * self.alpha_y);
-            (Float::sqrt(1.0 + alpha_sqr * tan_theta_sqr) - 1.0) * 0.5
+            ((1.0 + alpha_sqr * tan_theta_sqr).sqrt() - 1.0) * 0.5
         } else {
             0.0
         }
@@ -136,7 +136,7 @@ impl TrowbridgeReitzDistribution {
     }
 
     pub fn pdf(&self, output_direction: Vec3, sub_normal: Vec3) -> f32 {
-        Float::abs(self.masking_func(output_direction) * self.distribution(sub_normal) * output_direction.dot(sub_normal) / output_direction.cos_theta())
+        (self.masking_func(output_direction) * self.distribution(sub_normal) * output_direction.dot(sub_normal) / output_direction.cos_theta()).abs()
     }
 
     pub fn sample(&self, output_direction: Vec3, u: Vec2) -> Vec3 {
@@ -154,21 +154,21 @@ impl TrowbridgeReitzDistribution {
 
         let mut point = sampling::sample_uniform_disk_polar(u);
 
-        let h = Float::sqrt(1.0 - math::sqr(point.x));
+        let h = (1.0 - math::sqr(point.x)).sqrt();
         point.y = math::lerp(h, point.y, (1.0 + wh.z) * 0.5);
 
-        let point_z = Float::sqrt(Float::max(1.0 - point.length_squared(), 0.0));
+        let point_z = (1.0 - point.length_squared()).max(0.0).sqrt();
         let nh = point.x * tangent_x + point.y * tangent_y + point_z * wh;
 
-        Vec3::new(self.alpha_x * nh.x, self.alpha_y * nh.y, Float::max(nh.z, 1.0e-6)).normalize()
+        Vec3::new(self.alpha_x * nh.x, self.alpha_y * nh.y, nh.z.max(1.0e-6)).normalize()
     }
 
     pub fn regularize(&mut self) {
         if self.alpha_x < 0.3 {
-            self.alpha_x = Float::clamp(self.alpha_x * 2.0, 0.1, 0.3);
+            self.alpha_x = (self.alpha_x * 2.0).clamp(0.1, 0.3);
         }
         if self.alpha_y < 0.3 {
-            self.alpha_y = Float::clamp(self.alpha_y * 2.0, 0.1, 0.3);
+            self.alpha_y = (self.alpha_y * 2.0).clamp(0.1, 0.3);
         }
     }
 }
@@ -191,8 +191,8 @@ impl Bsdf for ConductorBsdf {
 
     fn bsdf_func(&self, output_direction: Vec3, input_direction: Vec3, _: TransportMode) -> SampledSpectrum {
         if output_direction.z * input_direction.z > 0.0 && !self.roughness.effectively_smooth() {
-            let cos_theta_o = Float::abs(output_direction.cos_theta());
-            let cos_theta_i = Float::abs(input_direction.cos_theta());
+            let cos_theta_o = output_direction.cos_theta().abs();
+            let cos_theta_i = input_direction.cos_theta().abs();
 
             if cos_theta_o == 0.0 || cos_theta_i == 0.0 {
                 SampledSpectrum::trivial()
@@ -203,7 +203,7 @@ impl Bsdf for ConductorBsdf {
                     SampledSpectrum::trivial()
                 } else {
                     sub_normal = sub_normal.normalize();
-                    let fresnel = fresnel_complex_sampled(Float::abs(output_direction.dot(sub_normal)), self.eta_re, self.eta_im);
+                    let fresnel = fresnel_complex_sampled(output_direction.dot(sub_normal).abs(), self.eta_re, self.eta_im);
                     fresnel * self.roughness.distribution(sub_normal) * self.roughness.masking_shadowing_func(output_direction, input_direction) / (4.0 * cos_theta_o * cos_theta_i)
                 }
             }
@@ -219,7 +219,7 @@ impl Bsdf for ConductorBsdf {
 
         if self.roughness.effectively_smooth() {
             let input_direction = Vec3::new(-output_direction.x, -output_direction.y, output_direction.z);
-            let fresnel = fresnel_complex_sampled(Float::abs(input_direction.cos_theta()), self.eta_re, self.eta_im);
+            let fresnel = fresnel_complex_sampled(input_direction.cos_theta().abs(), self.eta_re, self.eta_im);
 
             return Some(BsdfSample {
                 sampled_func: fresnel,
@@ -242,14 +242,14 @@ impl Bsdf for ConductorBsdf {
             return None;
         }
 
-        let pdf = self.roughness.pdf(output_direction, sub_normal) / (4.0 * Float::abs(output_direction.dot(sub_normal)));
-        let cos_theta_o = Float::abs(output_direction.cos_theta());
-        let cos_theta_i = Float::abs(input_direction.cos_theta());
+        let pdf = self.roughness.pdf(output_direction, sub_normal) / (4.0 * output_direction.dot(sub_normal).abs());
+        let cos_theta_o = output_direction.cos_theta().abs();
+        let cos_theta_i = input_direction.cos_theta().abs();
 
         if cos_theta_o == 0.0 || cos_theta_i == 0.0 {
             None
         } else {
-            let fresnel = fresnel_complex_sampled(Float::abs(output_direction.dot(sub_normal)), self.eta_re, self.eta_im);
+            let fresnel = fresnel_complex_sampled(output_direction.dot(sub_normal).abs(), self.eta_re, self.eta_im);
             let sampled_func = fresnel * self.roughness.distribution(sub_normal) * self.roughness.masking_shadowing_func(output_direction, input_direction) / (4.0 * cos_theta_o * cos_theta_i);
 
             Some(BsdfSample {
@@ -271,7 +271,7 @@ impl Bsdf for ConductorBsdf {
                 0.0
             } else {
                 sub_normal = sub_normal.normalize().faceforward(Vec3::new(0.0, 0.0, 1.0));
-                self.roughness.pdf(output_direction, sub_normal) / (4.0 * Float::abs(output_direction.dot(sub_normal)))
+                self.roughness.pdf(output_direction, sub_normal) / (4.0 * output_direction.dot(sub_normal).abs())
             }
         } else {
             0.0

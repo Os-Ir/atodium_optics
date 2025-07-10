@@ -6,11 +6,11 @@ use spirv_std::glam::{Vec2, Vec3};
 use spirv_std::num_traits::Float;
 
 #[repr(C)]
-pub struct DiffuseBsdf {
+pub struct LambertianBsdf {
     reflect: SampledSpectrum,
 }
 
-impl Bsdf for DiffuseBsdf {
+impl Bsdf for LambertianBsdf {
     fn flags(&self) -> BsdfFlags {
         if self.reflect.is_nontrivial() {
             BsdfFlags::DIFFUSE_REFLECTION

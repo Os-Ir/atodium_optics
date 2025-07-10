@@ -1,4 +1,4 @@
-use num_traits::Float;
+use spirv_std::num_traits::Float;
 use spirv_std::glam::{Vec3, Vec3A};
 
 pub trait BasicVecOperation: Copy {
@@ -45,7 +45,7 @@ impl BasicVecOperation for Vec3 {
 
     #[inline]
     fn sin_theta(&self) -> f32 {
-        Float::sqrt(self.sin_theta_sqr())
+        self.sin_theta_sqr().sqrt()
     }
 
     #[inline]
@@ -60,7 +60,7 @@ impl BasicVecOperation for Vec3 {
 
     #[inline]
     fn sin_theta_sqr(&self) -> f32 {
-        Float::max(1.0 - self.cos_theta_sqr(), 0.0)
+        (1.0 - self.cos_theta_sqr()).max(0.0)
     }
 
     #[inline]
@@ -75,7 +75,7 @@ impl BasicVecOperation for Vec3 {
         if sin_theta == 0.0 {
             1.0
         } else {
-            Float::clamp(self.y / sin_theta, -1.0, 1.0)
+            (self.y / sin_theta).clamp(-1.0, 1.0)
         }
     }
 
@@ -86,7 +86,7 @@ impl BasicVecOperation for Vec3 {
         if sin_theta == 0.0 {
             0.0
         } else {
-            Float::clamp(self.x / sin_theta, -1.0, 1.0)
+            (self.x / sin_theta).clamp(-1.0, 1.0)
         }
     }
 }
@@ -113,7 +113,7 @@ impl BasicVecOperation for Vec3A {
 
     #[inline]
     fn sin_theta(&self) -> f32 {
-        Float::sqrt(self.sin_theta_sqr())
+        self.sin_theta_sqr().sqrt()
     }
 
     #[inline]
@@ -128,7 +128,7 @@ impl BasicVecOperation for Vec3A {
 
     #[inline]
     fn sin_theta_sqr(&self) -> f32 {
-        Float::max(1.0 - self.cos_theta_sqr(), 0.0)
+        (1.0 - self.cos_theta_sqr()).max(0.0)
     }
 
     #[inline]
@@ -143,7 +143,7 @@ impl BasicVecOperation for Vec3A {
         if sin_theta == 0.0 {
             1.0
         } else {
-            Float::clamp(self.y / sin_theta, -1.0, 1.0)
+            (self.y / sin_theta).clamp(-1.0, 1.0)
         }
     }
 
@@ -154,7 +154,7 @@ impl BasicVecOperation for Vec3A {
         if sin_theta == 0.0 {
             0.0
         } else {
-            Float::clamp(self.x / sin_theta, -1.0, 1.0)
+            (self.x / sin_theta).clamp(-1.0, 1.0)
         }
     }
 }

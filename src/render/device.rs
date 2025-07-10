@@ -1,6 +1,6 @@
-use crate::util;
 use crate::render::pipeline::RayTracingSbt;
-use anyhow::{Result, bail};
+use crate::util;
+use anyhow::{bail, Result};
 use ash::ext::debug_utils;
 use ash::khr::{acceleration_structure, ray_tracing_pipeline};
 use ash::vk;

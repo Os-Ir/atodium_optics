@@ -1,5 +1,5 @@
 use core::ops::{Add, Mul};
-use num_traits::Float;
+use spirv_std::num_traits::Float;
 use spirv_std::glam::Mat4;
 
 pub fn sqr<T>(val: T) -> T

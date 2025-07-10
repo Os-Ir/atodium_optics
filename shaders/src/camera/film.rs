@@ -169,13 +169,13 @@ impl PixelSensor {
         }
     }
 
-    pub fn sensor_rgb(&self, mut luminance: SampledSpectrum, lambda: &SampledWavelengths) -> RgbColor {
-        luminance = luminance.safe_div(lambda.pdf_spectrum());
+    pub fn sensor_rgb(&self, mut radiance: SampledSpectrum, lambda: &SampledWavelengths) -> RgbColor {
+        radiance = radiance.safe_div(lambda.pdf_spectrum());
 
         RgbColor::new(
-            (self.curve_r.sample(lambda) * luminance).average(),
-            (self.curve_g.sample(lambda) * luminance).average(),
-            (self.curve_b.sample(lambda) * luminance).average(),
+            (self.curve_r.sample(lambda) * radiance).average(),
+            (self.curve_g.sample(lambda) * radiance).average(),
+            (self.curve_b.sample(lambda) * radiance).average(),
         ) * self.image_ratio
     }
 
@@ -230,13 +230,13 @@ pub struct VisibleSurface {
 }
 
 pub trait IFilm {
-    fn add_sample(&mut self, point_film: UVec2, luminance: SampledSpectrum, lambda: &SampledWavelengths, surface: Option<VisibleSurface>, weight: f32);
+    fn add_sample(&mut self, point_film: UVec2, radiance: SampledSpectrum, lambda: &SampledWavelengths, surface: Option<VisibleSurface>, weight: f32);
 
     fn sample_bounds(&self) -> (Vec2, Vec2);
 
     fn use_visible_surface(&self) -> bool;
 
-    fn add_splat(&mut self, point: Vec2, luminance: SampledSpectrum, lambda: &SampledWavelengths);
+    fn add_splat(&mut self, point: Vec2, radiance: SampledSpectrum, lambda: &SampledWavelengths);
 
     fn sample_wavelengths(&self, u: f32) -> SampledWavelengths;
 
@@ -294,8 +294,8 @@ impl Deref for RgbFilm {
 }
 
 impl IFilm for RgbFilm {
-    fn add_sample(&mut self, point_film: UVec2, luminance: SampledSpectrum, lambda: &SampledWavelengths, _: Option<VisibleSurface>, weight: f32) {
-        let mut rgb = self.sensor.sensor_rgb(luminance, &lambda);
+    fn add_sample(&mut self, point_film: UVec2, radiance: SampledSpectrum, lambda: &SampledWavelengths, _: Option<VisibleSurface>, weight: f32) {
+        let mut rgb = self.sensor.sensor_rgb(radiance, &lambda);
 
         let m = rgb.r.max(rgb.g).max(rgb.b);
         if m > self.max_component_value {
@@ -325,8 +325,8 @@ impl IFilm for RgbFilm {
         false
     }
 
-    fn add_splat(&mut self, point: Vec2, luminance: SampledSpectrum, lambda: &SampledWavelengths) {
-        let mut rgb = self.sensor.sensor_rgb(luminance, &lambda);
+    fn add_splat(&mut self, point: Vec2, radiance: SampledSpectrum, lambda: &SampledWavelengths) {
+        let mut rgb = self.sensor.sensor_rgb(radiance, &lambda);
 
         let m = rgb.r.max(rgb.g).max(rgb.b);
         if m > self.max_component_value {

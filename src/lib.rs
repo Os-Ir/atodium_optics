@@ -1,24 +1,24 @@
 use crate::memory::render_image::ImageDesc;
-use crate::rt::{blas, tlas};
-use crate::util::OutputFormat;
 use crate::render::descriptor_set::{DescriptorId, WrappedDescriptorSet};
 use crate::render::pipeline::{PipelineDesc, WrappedPipeline};
 use crate::render::shader_builder;
+use crate::rt::{blas, tlas};
+use crate::util::OutputFormat;
 use anyhow::Result;
 use ash::vk;
 use ash::vk::{AccessFlags, BufferUsageFlags, DependencyFlags, DeviceSize, Format, ImageLayout, ImageTiling, ImageUsageFlags, MemoryBarrier, MemoryPropertyFlags, PipelineStageFlags};
 use glam::Vec4;
 use gpu_allocator::MemoryLocation;
-use image::hdr::HdrEncoder;
+use image::codecs::hdr::HdrEncoder;
 use log::{error, info};
 use std::fs::File;
 use std::{mem, slice};
 
-pub mod model;
 pub mod memory;
+pub mod model;
+pub mod render;
 pub mod rt;
 pub mod util;
-pub mod render;
 
 pub fn test_hello_world() -> Result<()> {
     let (device, buffer_allocator, _, _) = render::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
@@ -87,7 +87,8 @@ pub fn test_cornell() -> Result<()> {
     let blas = model
         .meshes
         .iter()
-        .filter_map(|(mesh, _)| match blas::create_blas(device.clone(), &allocator, &mesh.mesh_buffer) {
+        .enumerate()
+        .filter_map(|(i, (mesh, _))| match blas::create_blas(device.clone(), &allocator, &mesh.mesh_buffer, i as _) {
             Ok(blas) => Some(blas),
             Err(error) => {
                 error!("{:?}", error);
@@ -153,39 +154,18 @@ pub fn test_cornell() -> Result<()> {
 
 pub fn test_rt_pipeline() -> Result<()> {
     let (device, allocator, image_allocator, _) = render::init_vulkan_context(true, "test_hello_world", vk::make_api_version(0, 1, 1, 1))?;
-
     let shaders = shader_builder::compile_spirv_shaders();
 
-    let model = model::load_gltf(device.clone(), &allocator, &image_allocator, util::lib_root().join("models/cornell.gltf").to_str().unwrap())?;
+    let model = model::load_gltf(device.clone(), &allocator, &image_allocator, util::lib_root().join("models/cornell_color.gltf").to_str().unwrap())?;
 
     info!("Render model loaded");
 
-    let vertices = model
-        .meshes
-        .iter()
-        .map(|(mesh, transform)| mesh.mesh_buffer.vertices.iter().map(|&vertex| (*transform) * vertex.pos).collect::<Vec<_>>())
-        .flatten()
-        .collect::<Vec<_>>();
+    let instance_metadata_buffer = model.write_instance_metadata_to_buffer(&allocator)?;
+    let vertices_buffer = model.write_vertices_to_buffer(&allocator)?;
+    let indices_buffer = model.write_indices_to_buffer(&allocator)?;
+    let materials_buffer = model.write_material_to_buffer(&allocator)?;
 
-    let vertices_buffer = allocator.allocate(
-        (vertices.len() * mem::size_of::<Vec4>()) as DeviceSize,
-        BufferUsageFlags::STORAGE_BUFFER | BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER | BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR,
-        MemoryLocation::GpuOnly,
-    )?;
-
-    allocator.upload_data(&vertices_buffer, &vertices)?;
-
-    let blas = model
-        .meshes
-        .iter()
-        .filter_map(|(mesh, _)| match blas::create_blas(device.clone(), &allocator, &mesh.mesh_buffer) {
-            Ok(blas) => Some(blas),
-            Err(error) => {
-                error!("{:?}", error);
-                None
-            }
-        })
-        .collect::<Vec<_>>();
+    let blas = model.build_blas(device.clone(), &allocator);
 
     info!("Bottom-level acceleration structures created");
 
@@ -225,12 +205,13 @@ pub fn test_rt_pipeline() -> Result<()> {
     descriptor.write_tlas(DescriptorId::Index(0), &tlas)?;
     descriptor.write_storage_image(DescriptorId::Index(1), &shader_image)?;
     descriptor.write_storage_buffer(DescriptorId::Index(2), &vertices_buffer)?;
-    descriptor.write_storage_buffer(DescriptorId::Index(3), &(model.meshes[0].0.mesh_buffer.index_buffer))?;
+    descriptor.write_storage_buffer(DescriptorId::Index(3), &indices_buffer)?;
+    descriptor.write_storage_buffer(DescriptorId::Index(4), &instance_metadata_buffer)?;
+    descriptor.write_storage_buffer(DescriptorId::Index(5), &materials_buffer)?;
 
     device.single_time_command(|cmd_buf| {
         pipeline.bind(cmd_buf);
         descriptor.bind(cmd_buf, &pipeline);
-
         device.cmd_trace_rays(cmd_buf, pipeline.raytracing_sbt.as_ref().unwrap(), shader_image.extent());
     })?;
 
@@ -240,7 +221,7 @@ pub fn test_rt_pipeline() -> Result<()> {
 
     let pixels = image_allocator.acquire_pixels(&mut host_image, None)?;
 
-    util::output_image(&util::lib_root().join("output").join("cornell_pipelined.png"), render_width, render_height, &pixels, OutputFormat::Png)?;
+    util::output_image(&util::lib_root().join("output").join("cornell_pipelined.hdr"), render_width, render_height, &pixels, OutputFormat::Hdr)?;
 
     Ok(())
 }

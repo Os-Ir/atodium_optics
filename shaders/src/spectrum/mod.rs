@@ -4,7 +4,7 @@ use crate::util::math;
 use color::XyzColor;
 use core::array;
 use core::ops::{Add, AddAssign, Deref, Div, DivAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign};
-use num_traits::Float;
+use spirv_std::num_traits::Float;
 use spirv_std::glam::Vec3;
 
 pub mod color;
@@ -27,7 +27,7 @@ pub fn black_body(mut lambda: f32, temp: f32) -> f32 {
 
     lambda = lambda * 1.0e-9;
 
-    (2.0 * PLANCK * LIGHT * LIGHT) / (math::powi(lambda, 5) * (Float::exp((PLANCK * LIGHT) / (lambda * BOLTZMANN * temp)) - 1.0))
+    (2.0 * PLANCK * LIGHT * LIGHT) / (math::powi(lambda, 5) * (((PLANCK * LIGHT) / (lambda * BOLTZMANN * temp)).exp() - 1.0))
 }
 
 pub trait ISpectrum {
@@ -298,7 +298,7 @@ impl SampledSpectrum {
         color_space.to_rgb(xyz)
     }
 
-    pub fn luminance(&self, lambda: &SampledWavelengths) -> f32 {
+    pub fn radiance(&self, lambda: &SampledWavelengths) -> f32 {
         self.to_xyz(lambda).y
     }
 

@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use anyhow::{bail, Result};
 use bytemuck::Pod;
-use image::hdr::HdrEncoder;
+use image::codecs::hdr::HdrEncoder;
 use image::{ImageBuffer, ImageFormat};
 use std::ffi::{c_char, CStr};
 use std::fs::File;

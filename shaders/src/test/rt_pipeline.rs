@@ -1,3 +1,5 @@
+use crate::bindless;
+use crate::bindless::{InstanceMetadata, RenderMaterial, Vertex};
 use crate::util::vector::BasicVecOperation;
 use spirv_std::glam::{UVec2, UVec3, Vec2, Vec3, Vec3Swizzles, Vec4, Vec4Swizzles};
 use spirv_std::num_traits::Float;
@@ -40,14 +42,14 @@ fn sky_color(direction: Vec3) -> Vec3 {
     }
 }
 
-fn get_hit_result(primitive_id: usize, vertices: &[Vec4], indices: &[u32], hit_uv: Vec2, ray_direction: Vec3) -> HitResult {
-    let i0 = indices[3 * primitive_id + 0] as usize;
-    let i1 = indices[3 * primitive_id + 1] as usize;
-    let i2 = indices[3 * primitive_id + 2] as usize;
+fn get_hit_result(index_offset: usize, vertices: &[Vertex], indices: &[u32], metadata: InstanceMetadata, material: &RenderMaterial, hit_uv: Vec2, ray_direction: Vec3) -> HitResult {
+    let i0 = indices[index_offset + 0] as usize;
+    let i1 = indices[index_offset + 1] as usize;
+    let i2 = indices[index_offset + 2] as usize;
 
-    let v0 = vertices[i0].xyz();
-    let v1 = vertices[i1].xyz();
-    let v2 = vertices[i2].xyz();
+    let v0 = (metadata.transform * vertices[i0].pos).xyz();
+    let v1 = (metadata.transform * vertices[i1].pos).xyz();
+    let v2 = (metadata.transform * vertices[i2].pos).xyz();
 
     let barycentrics: Vec3 = Vec3::new(1.0 - hit_uv.x - hit_uv.y, hit_uv.x, hit_uv.y);
 
@@ -56,16 +58,14 @@ fn get_hit_result(primitive_id: usize, vertices: &[Vec4], indices: &[u32], hit_u
     HitResult {
         position: v0 * barycentrics.x + v1 * barycentrics.y + v2 * barycentrics.z,
         normal: normal.faceforward(ray_direction),
-        color: Vec3::new(0.7, 0.7, 0.7),
+        color: material.base_color.xyz(),
     }
 }
 
 #[spirv(ray_generation)]
 pub fn main_rgen(
     #[spirv(ray_payload)] payload: &mut Payload,
-
     #[spirv(launch_id)] launch_id: UVec3,
-
     #[spirv(descriptor_set = 0, binding = 0)] tlas: &AccelerationStructure,
     #[spirv(descriptor_set = 0, binding = 1)] image_output: &Image!(2D, format = rgba32f, sampled = false),
 ) {
@@ -121,23 +121,32 @@ pub fn main_rgen(
 #[spirv(closest_hit)]
 pub fn main_rchit(
     #[spirv(incoming_ray_payload)] payload: &mut Payload,
-
     #[spirv(world_ray_direction)] world_ray_direction: Vec3,
     #[spirv(primitive_id)] primitive_id: u32,
+    #[spirv(instance_custom_index)] instance_custom_index: u32,
     #[spirv(hit_attribute)] hit_attributes: &Vec2,
-
-    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] vertices: &[Vec4],
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] vertices: &[Vertex],
     #[spirv(storage_buffer, descriptor_set = 0, binding = 3)] indices: &[u32],
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 4)] metadata: &[InstanceMetadata],
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 5)] materials: &[RenderMaterial],
 ) {
-    let hit_result = get_hit_result(primitive_id as _, vertices, indices, *hit_attributes, world_ray_direction);
+    let hit_result = get_hit_result(
+        bindless::get_global_index_offset(metadata, instance_custom_index, primitive_id),
+        vertices,
+        indices,
+        bindless::get_instance_metadata(metadata, instance_custom_index),
+        bindless::get_instance_material(materials, instance_custom_index),
+        *hit_attributes,
+        world_ray_direction,
+    );
 
     let phi = 6.2831853 * gen_rand(&mut payload.rand_state);
     let u = 2.0 * gen_rand(&mut payload.rand_state) - 1.0;
-    let r = Float::sqrt(1.0 - u * u);
+    let r = (1.0 - u * u).sqrt();
 
     payload.color = hit_result.color;
     payload.ray_origin = hit_result.position + 0.0001 * hit_result.normal;
-    payload.ray_direction = (hit_result.normal + Vec3::new(r * Float::cos(phi), r * Float::sin(phi), u)).normalize();
+    payload.ray_direction = (hit_result.normal + Vec3::new(r * phi.cos(), r * phi.sin(), u)).normalize();
     payload.ray_hit_sky = 0;
 }
 

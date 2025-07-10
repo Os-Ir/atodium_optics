@@ -1,9 +1,9 @@
+use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocator};
 use crate::model::mesh::MeshBuffer;
 use crate::model::vertex::Vertex;
-use crate::memory::render_buffer::{RenderBuffer, RenderBufferAllocator};
-use crate::rt;
 use crate::render::device::WrappedDeviceRef;
-use anyhow::{Result, anyhow};
+use crate::rt;
+use anyhow::{anyhow, Result};
 use ash::vk::{
     AccelerationStructureBuildGeometryInfoKHR, AccelerationStructureBuildRangeInfoKHR, AccelerationStructureBuildSizesInfoKHR, AccelerationStructureBuildTypeKHR, AccelerationStructureGeometryDataKHR,
     AccelerationStructureGeometryKHR, AccelerationStructureGeometryTrianglesDataKHR, AccelerationStructureKHR, AccelerationStructureTypeKHR, BufferUsageFlags, BuildAccelerationStructureFlagsKHR,
@@ -17,6 +17,7 @@ pub struct Blas {
 
     pub handle: AccelerationStructureKHR,
     pub blas_buffer: RenderBuffer,
+    pub custom_index: u32,
 }
 
 impl Drop for Blas {
@@ -27,7 +28,7 @@ impl Drop for Blas {
     }
 }
 
-pub fn create_blas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, mesh_buffer: &MeshBuffer) -> Result<Blas> {
+pub fn create_blas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, mesh_buffer: &MeshBuffer, custom_index: u32) -> Result<Blas> {
     let vertex_device_addr = DeviceOrHostAddressConstKHR {
         device_address: mesh_buffer
             .vertex_buffer
@@ -92,5 +93,10 @@ pub fn create_blas(device: WrappedDeviceRef, allocator: &RenderBufferAllocator, 
             .cmd_build_acceleration_structures(cmd_buf, slice::from_ref(&build_geometry_info), slice::from_ref(&build_range_info.as_slice()));
     })?;
 
-    Ok(Blas { device, handle: blas, blas_buffer })
+    Ok(Blas {
+        device,
+        handle: blas,
+        blas_buffer,
+        custom_index,
+    })
 }

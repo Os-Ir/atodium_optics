@@ -2,7 +2,7 @@ use crate::util::math;
 use crate::{calc_polynomial, util};
 use core::array;
 use core::ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Sub, SubAssign};
-use num_traits::Float;
+use spirv_std::num_traits::Float;
 use spirv_std::glam::{Mat3, Vec3};
 
 #[rustfmt::skip]
@@ -377,7 +377,7 @@ impl RgbSigmoidPolynomial {
             return if x.is_sign_positive() { 1.0 } else { 0.0 };
         }
 
-        0.5 * (1.0 + x / Float::sqrt(1.0 + x * x))
+        0.5 * (1.0 + x / (1.0 + x * x).sqrt())
     }
 }
 
@@ -394,7 +394,7 @@ pub struct RgbToSpectrumTable {
 impl RgbToSpectrumTable {
     pub fn color_to_polynomial(&self, rgb: RgbColor) -> RgbSigmoidPolynomial {
         if rgb.r == rgb.g && rgb.g == rgb.b {
-            return RgbSigmoidPolynomial::new(0.0, 0.0, (rgb.r - 0.5) / Float::sqrt(rgb.r * (1.0 - rgb.r)));
+            return RgbSigmoidPolynomial::new(0.0, 0.0, (rgb.r - 0.5) / (rgb.r * (1.0 - rgb.r)).sqrt());
         }
 
         let max_idx: usize = if rgb[0] > rgb[1] {
